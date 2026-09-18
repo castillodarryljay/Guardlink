@@ -1,0 +1,6 @@
+{
+  "name": "GuardLink",
+  "description": "Local network remote screen blocker",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
