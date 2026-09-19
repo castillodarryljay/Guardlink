@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- GuardLink Elite Design System Colors -->
+    <color name="bg_primary">#0B0F19</color>
+    <color name="surface_card">#151B28</color>
+    <color name="surface_elevated">#1A2234</color>
+    <color name="border_stroke">#1F293D</color>
+    <color name="primary_accent">#3B82F6</color>
+    <color name="accent_warning">#EF4444</color>
+    <color name="accent_destructive">#EF4444</color>
+    <color name="success_telemetry">#10B981</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_muted">#64748B</color>
+
+    <!-- iOS Liquid Glass & VisionOS Frosted Tokens -->
+    <color name="glass_tint">#20FFFFFF</color>
+    <color name="glass_tint_destructive">#33EF4444</color>
+    <color name="glass_stroke_specular">#40FFFFFF</color>
+    <color name="glass_stroke_destructive">#80F87171</color>
+    <color name="glass_overlay_color">#14FFFFFF</color>
+    <color name="glass_overlay_destructive">#22EF4444</color>
+    <color name="glass_input_bg">#1AFFFFFF</color>
+    <color name="glass_pill_bg">#26FFFFFF</color>
+    <color name="glass_pill_stroke">#4DFFFFFF</color>
+    <color name="glass_emerald_tint">#2610B981</color>
+    <color name="glass_emerald_stroke">#4D34D399</color>
+
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>

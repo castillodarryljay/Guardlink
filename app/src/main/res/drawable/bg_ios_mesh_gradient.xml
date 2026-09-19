@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Base deep obsidian backdrop -->
+    <item>
+        <color android:color="#0B0F19" />
+    </item>
+    <!-- Top-right sapphire ambient glow orb -->
+    <item
+        android:gravity="top|end"
+        android:width="360dp"
+        android:height="360dp"
+        android:top="-70dp"
+        android:right="-70dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="180dp"
+                android:startColor="#2E3B82F6"
+                android:endColor="#000B0F19" />
+        </shape>
+    </item>
+    <!-- Bottom-left subtle indigo/violet ambient orb -->
+    <item
+        android:gravity="bottom|start"
+        android:width="320dp"
+        android:height="320dp"
+        android:bottom="60dp"
+        android:left="-70dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="160dp"
+                android:startColor="#226366F1"
+                android:endColor="#000B0F19" />
+        </shape>
+    </item>
+</layer-list>

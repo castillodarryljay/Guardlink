@@ -47,6 +47,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -127,7 +128,7 @@ fun AdminDashboardScreen(
                 )
             }
         },
-        containerColor = Bg
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -153,11 +154,11 @@ fun AdminDashboardScreen(
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
-            // Header
+            // Header: Brand Badge & Status Pill
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -169,8 +170,8 @@ fun AdminDashboardScreen(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(40.dp)
-                            .background(AccentBlue.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .border(1.dp, AccentBlue.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .background(Surface, RoundedCornerShape(10.dp))
+                            .border(1.dp, Border, RoundedCornerShape(10.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Shield,
@@ -184,17 +185,16 @@ fun AdminDashboardScreen(
                         Text(
                             text = "CONTROL CENTER",
                             color = TextSecondary,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.5.sp
+                            letterSpacing = 1.sp
                         )
                         Text(
                             text = "GUARDLINK",
                             color = TextPrimary,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
@@ -202,37 +202,47 @@ fun AdminDashboardScreen(
                 Column(
                     horizontalAlignment = Alignment.End
                 ) {
+                    // Status Pill (pulse dot + ONLINE / SYNCED)
                     Box(
                         modifier = Modifier
-                            .background(AccentGreen.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                            .border(1.dp, AccentGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .background(SurfaceAlt, RoundedCornerShape(100.dp))
+                            .border(1.dp, Border, RoundedCornerShape(100.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text(
-                            text = "Cloud Mode",
-                            color = AccentGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .background(if (isConnected) AccentGreen else AccentAmber, CircleShape)
+                            )
+                            Text(
+                                text = if (isConnected) "ONLINE / SYNCED" else "RECONNECTING",
+                                color = if (isConnected) AccentGreen else AccentAmber,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         text = "${StateManager.deviceName.value} (Admin)",
                         color = TextSecondary,
-                        fontSize = 9.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            // Cloud Sync System Card (Slim elegant ribbon style)
+            // Cloud Sync System Card (Slim elegant ribbon style with liquid glass)
             Card(
                 colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, Border, RoundedCornerShape(12.dp))
+                    .border(1.dp, if (isConnected) GlassGreenBorderBrush else GlassAmberBorderBrush, RoundedCornerShape(12.dp))
             ) {
                 Row(
                     modifier = Modifier
@@ -252,7 +262,7 @@ fun AdminDashboardScreen(
                                 .background(if (isConnected) AccentGreen else Color(0xFFFFA726), CircleShape)
                         )
                         Text(
-                            text = if (isConnected) "CLOUD SYNC SYSTEM ACTIVE" else "CLOUD SYNC ACTIVE (SYSTEM RETRYNG)",
+                            text = if (isConnected) "CLOUD SYNC SYSTEM ACTIVE" else "CLOUD SYNC ACTIVE (SYSTEM RETRYING)",
                             color = TextPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -263,9 +273,9 @@ fun AdminDashboardScreen(
 
                     Box(
                         modifier = Modifier
-                            .background(if (isConnected) AccentGreen.copy(alpha = 0.1f) else Color(0xFFFFA726).copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                            .border(1.dp, if (isConnected) AccentGreen.copy(alpha = 0.2f) else Color(0xFFFFA726).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .background(if (isConnected) AccentGreen.copy(alpha = 0.15f) else Color(0xFFFFA726).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .border(1.dp, if (isConnected) GlassGreenBorderBrush else GlassAmberBorderBrush, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = if (isConnected) "ONLINE" else "RECONNECTING",
@@ -293,196 +303,410 @@ fun AdminDashboardScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            // Compact Side-by-Side row to save valuable vertical space
-            Row(
+            // Quick Actions (2x2 Uniform Grid with Liquid Glass Refraction)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Schedule Lockdowns Card
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { showScheduleManager = true }
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                // Row 1: Lockdown & Pair Device
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
+                    // 1. Lockdown
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .padding(horizontal = 10.dp, vertical = 10.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .weight(1f)
+                            .height(78.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(LiquidGlassGlareGradient)
+                            .clickable { showScheduleManager = true }
+                            .border(1.2.dp, GlassRedBorderBrush, RoundedCornerShape(14.dp))
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
+                        Row(
                             modifier = Modifier
-                                .size(28.dp)
-                                .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                                .fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = "Schedules Logo",
-                                tint = AccentBlue,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "LOCKDOWNS",
-                                color = AccentBlue,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.5.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Automated blocks",
-                                color = TextSecondary,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                // Add Device Card
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { showManualDeviceManager = true }
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 10.dp, vertical = 10.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(AccentGreen.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Device Logo",
-                                tint = AccentGreen,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "ADD DEVICE",
-                                color = AccentGreen,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.5.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Register & pair",
-                                color = TextSecondary,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Screen Sharing Broadcast Authorization Banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        if (!isScreenAuthorized) {
-                            val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? android.media.projection.MediaProjectionManager
-                            val intent = mpm?.createScreenCaptureIntent()
-                            if (intent != null) {
-                                mediaProjectionLauncher.launch(intent)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(AccentRed.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LockClock,
+                                    contentDescription = "Lockdown",
+                                    tint = AccentRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "LOCKDOWN",
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "Auto schedule",
+                                    color = TextSecondary,
+                                    fontSize = 10.sp,
+                                    maxLines = 1
+                                )
                             }
                         }
                     }
-                    .border(
-                        1.dp,
-                        if (isScreenAuthorized) AccentGreen.copy(alpha = 0.4f) else AccentPurple.copy(alpha = 0.4f),
-                        RoundedCornerShape(12.dp)
-                    )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
+
+                    // 2. Pair Device
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(78.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(LiquidGlassGlareGradient)
+                            .clickable { showManualDeviceManager = true }
+                            .border(1.2.dp, GlassAccentBorderBrush, RoundedCornerShape(14.dp))
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
+                        Row(
                             modifier = Modifier
-                                .size(28.dp)
-                                .background(
-                                    if (isScreenAuthorized) AccentGreen.copy(alpha = 0.15f) else AccentPurple.copy(alpha = 0.15f),
-                                    RoundedCornerShape(8.dp)
-                                )
+                                .padding(12.dp)
+                                .fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isScreenAuthorized) Icons.Default.CheckCircle else Icons.Default.ScreenShare,
-                                contentDescription = "Screen Share Status",
-                                tint = if (isScreenAuthorized) AccentGreen else AccentPurple,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = if (isScreenAuthorized) "SCREEN SHARING: READY" else "ENABLE SCREEN SHARING",
-                                color = if (isScreenAuthorized) AccentGreen else AccentPurple,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = if (isScreenAuthorized) "Authorized • Peers can view screen live in RAM" else "Tap to authorize peer screen viewing",
-                                color = TextSecondary,
-                                fontSize = 10.sp
-                            )
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Pair Device",
+                                    tint = AccentBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "PAIR DEVICE",
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "Register & sync",
+                                    color = TextSecondary,
+                                    fontSize = 10.sp,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
-                    if (!isScreenAuthorized) {
-                        Box(
+                }
+
+                // Row 2: Screen Sharing & Broadcast
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 3. Screen Sharing
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(78.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(LiquidGlassGlareGradient)
+                            .clickable {
+                                if (!isScreenAuthorized) {
+                                    val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? android.media.projection.MediaProjectionManager
+                                    val intent = mpm?.createScreenCaptureIntent()
+                                    if (intent != null) {
+                                        mediaProjectionLauncher.launch(intent)
+                                    }
+                                }
+                            }
+                            .border(1.2.dp, if (isScreenAuthorized) GlassGreenBorderBrush else GlassBorderBrush, RoundedCornerShape(14.dp))
+                    ) {
+                        Row(
                             modifier = Modifier
-                                .background(AccentPurple.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                .border(1.dp, AccentPurple.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(12.dp)
+                                .fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = "AUTHORIZE",
-                                color = AccentPurple,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(
+                                        if (isScreenAuthorized) AccentGreen.copy(alpha = 0.15f) else SurfaceAlt,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(1.dp, if (isScreenAuthorized) GlassGreenBorderBrush else GlassBorderBrush, RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(
+                                    imageVector = if (isScreenAuthorized) Icons.Default.CheckCircle else Icons.Default.ScreenShare,
+                                    contentDescription = "Screen Share",
+                                    tint = if (isScreenAuthorized) AccentGreen else AccentBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "SCREEN SHARE",
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = if (isScreenAuthorized) "Ready • In RAM" else "Tap to authorize",
+                                    color = if (isScreenAuthorized) AccentGreen else TextSecondary,
+                                    fontSize = 10.sp,
+                                    maxLines = 1
+                                )
+                            }
                         }
+                    }
+
+                    // 4. Broadcast
+                    var showBroadcastDialog by remember { mutableStateOf(false) }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(78.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(LiquidGlassGlareGradient)
+                            .clickable {
+                                if (devices.isNotEmpty()) {
+                                    showBroadcastDialog = true
+                                } else {
+                                    android.widget.Toast.makeText(context, "No connected devices to broadcast to", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .border(1.2.dp, GlassAmberBorderBrush, RoundedCornerShape(14.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(SurfaceAlt, RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Campaign,
+                                    contentDescription = "Broadcast",
+                                    tint = AccentAmber,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "BROADCAST",
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "Intercom voice alert",
+                                    color = TextSecondary,
+                                    fontSize = 10.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    if (showBroadcastDialog) {
+                        val themeBlur = LocalThemeBlur.current
+                        DisposableEffect(Unit) {
+                            themeBlur.value = true
+                            onDispose {
+                                themeBlur.value = false
+                            }
+                        }
+                        var broadcastMsg by remember { mutableStateOf("") }
+                        val quickPresets = listOf(
+                            "Dinner is ready, please come down! 🍽️",
+                            "Screen time is up, please put the device away. ⏳",
+                            "Please call me back immediately. 📞",
+                            "Emergency alert: Check your device now. 🚨",
+                            "Time for homework and studying. 📚",
+                            "Bedtime: Please plug your device into the charger. 🛌"
+                        )
+
+                        AlertDialog(
+                            onDismissRequest = { showBroadcastDialog = false },
+                            properties = DialogProperties(usePlatformDefaultWidth = false),
+                            modifier = Modifier
+                                .fillMaxWidth(0.95f)
+                                .widthIn(max = 480.dp)
+                                .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(20.dp)),
+                            shape = RoundedCornerShape(20.dp),
+                            title = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Campaign, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(22.dp))
+                                    }
+                                    Column {
+                                        Text("Voice Broadcast (TTS)", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                        Text("Read aloud via Text-to-Speech on devices", color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+                            },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        "Target devices will immediately speak the announcement out loud using Android Text-to-Speech (TTS) and display a priority alert banner.",
+                                        color = TextSecondary,
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+
+                                    // Quick Presets
+                                    Text(
+                                        "QUICK PRESETS",
+                                        color = AccentBlue,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        letterSpacing = 1.sp
+                                    )
+                                    androidx.compose.foundation.lazy.LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        items(quickPresets) { preset ->
+                                            Surface(
+                                                color = SurfaceAlt,
+                                                shape = RoundedCornerShape(16.dp),
+                                                modifier = Modifier
+                                                    .border(1.dp, Border, RoundedCornerShape(16.dp))
+                                                    .clickable { broadcastMsg = preset }
+                                            ) {
+                                                Text(
+                                                    text = preset,
+                                                    color = TextPrimary,
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    OutlinedTextField(
+                                        value = broadcastMsg,
+                                        onValueChange = { broadcastMsg = it },
+                                        placeholder = { Text("Type announcement to read aloud...", color = TextSecondary) },
+                                        shape = RoundedCornerShape(10.dp),
+                                        trailingIcon = {
+                                            if (broadcastMsg.isNotEmpty()) {
+                                                IconButton(onClick = { broadcastMsg = "" }) {
+                                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = SurfaceAlt,
+                                            unfocusedContainerColor = SurfaceAlt,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary,
+                                            focusedBorderColor = AccentAmber,
+                                            unfocusedBorderColor = Border
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 2,
+                                        maxLines = 4
+                                    )
+
+                                    // Preview local audio
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${broadcastMsg.length} characters",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                        OutlinedButton(
+                                            onClick = {
+                                                if (broadcastMsg.isNotBlank()) {
+                                                    com.example.tts.TextToSpeechManager.speak(context, broadcastMsg)
+                                                } else {
+                                                    android.widget.Toast.makeText(context, "Type text to test audio preview", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("TEST TTS AUDIO", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        if (broadcastMsg.isNotBlank()) {
+                                            val targetIps = devices.map { it.ip }
+                                            val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
+                                            com.example.network.FirebaseManager.sendBroadcastAnnouncement(targetIps, broadcastMsg, adminName)
+                                            android.widget.Toast.makeText(context, "📢 Voice broadcast dispatched to ${targetIps.size} device(s)", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                        showBroadcastDialog = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = broadcastMsg.isNotBlank()
+                                ) {
+                                    Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("TRANSMIT VOICE (${devices.size})", fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showBroadcastDialog = false }) {
+                                    Text("CANCEL", color = TextSecondary)
+                                }
+                            },
+                            containerColor = Surface
+                        )
                     }
                 }
             }
@@ -630,7 +854,8 @@ fun AdminDashboardScreen(
                             items(devices) { device ->
                                 DeviceCard(
                                     device = device,
-                                    onClick = { showDeviceControlsForDevice = device }
+                                    onViewScreen = { showScreenModalForDevice = device },
+                                    onMoreOptions = { showDeviceControlsForDevice = device }
                                 )
                             }
                         }
@@ -808,145 +1033,234 @@ fun ScanProgressSection(progress: Float, text: String) {
 @Composable
 fun DeviceCard(
     device: DiscoveredDevice,
-    onClick: () -> Unit
+    onViewScreen: () -> Unit = {},
+    onMoreOptions: () -> Unit = {}
 ) {
-    // Pulsing indicator for active blocks
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse_card")
-    val blockedAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "blocked_alpha"
-    )
+    val context = LocalContext.current
+    val truncatedId = remember(device.ip) {
+        val clean = device.ip.filter { it.isLetterOrDigit() }
+        if (clean.length > 4) "ID: ••••${clean.takeLast(4)}" else "ID: $clean"
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Surface),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(LiquidGlassGlareGradient)
             .border(
-                width = 1.dp,
-                color = if (device.status == "blocked") AccentRed.copy(alpha = 0.6f) else Border,
-                shape = RoundedCornerShape(16.dp)
+                width = 1.2.dp,
+                brush = if (device.status == "blocked") GlassRedBorderBrush else LiquidGlassChromaticBorder,
+                shape = RoundedCornerShape(14.dp)
             )
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .clickable { onMoreOptions() },
+        shape = RoundedCornerShape(14.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Device Icon relative status dots
-            Box(contentAlignment = Alignment.BottomEnd) {
+            // Top Row: Icon + Name & Truncated UUID + Status Badge & Battery
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Device Icon container (Liquid Glass frosted container)
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(46.dp)
-                        .background(SurfaceAlt, RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                        .size(42.dp)
+                        .background(SurfaceAlt, RoundedCornerShape(10.dp))
+                        .border(1.dp, GlassBorderBrush, RoundedCornerShape(10.dp))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Smartphone,
-                        contentDescription = null,
-                        tint = if (device.status == "blocked") AccentRed else TextSecondary,
+                        contentDescription = "Device Icon",
+                        tint = if (device.status == "blocked") AccentRed else AccentBlue,
                         modifier = Modifier.size(22.dp)
                     )
                 }
 
-                // Pulse status dot
-                val dotColor = when (device.status) {
-                    "active" -> AccentGreen
-                    "blocked" -> AccentRed
-                    "connecting" -> AccentAmber
-                    else -> Color.Gray
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Name & Truncated UUID with copy action
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = device.name,
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Device ID", device.ip))
+                            android.widget.Toast.makeText(context, "ID copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    ) {
+                        Text(
+                            text = truncatedId,
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy ID",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
-                val currentAlpha = if (device.status == "blocked") blockedAlpha else 1.0f
 
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .border(2.dp, Surface, CircleShape)
-                        .background(dotColor.copy(alpha = currentAlpha), CircleShape)
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Active Badge (mint emerald) + Battery Indicator
+                Column(horizontalAlignment = Alignment.End) {
+                    // Status Badge (mint emerald for active/online)
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                when (device.status) {
+                                    "active", "online" -> AccentGreen.copy(alpha = 0.15f)
+                                    "blocked" -> AccentRed.copy(alpha = 0.15f)
+                                    else -> AccentAmber.copy(alpha = 0.15f)
+                                },
+                                RoundedCornerShape(6.dp)
+                            )
+                            .border(
+                                1.dp,
+                                when (device.status) {
+                                    "active", "online" -> GlassGreenBorderBrush
+                                    "blocked" -> GlassRedBorderBrush
+                                    else -> GlassAmberBorderBrush
+                                },
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(
+                                        when (device.status) {
+                                            "active", "online" -> AccentGreen
+                                            "blocked" -> AccentRed
+                                            else -> AccentAmber
+                                        },
+                                        CircleShape
+                                    )
+                            )
+                            Text(
+                                text = if (device.status == "active" || device.status == "online") "ONLINE" else device.status.uppercase(),
+                                color = when (device.status) {
+                                    "active", "online" -> AccentGreen
+                                    "blocked" -> AccentRed
+                                    else -> AccentAmber
+                                },
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Battery Indicator
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
+                            contentDescription = "Battery",
+                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else TextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "${device.batteryLevel}%",
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
-
-            // Device info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = device.name,
-                    color = TextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = device.ip,
-                    color = TextMono,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Status label badge
-            Box(
-                modifier = Modifier
-                    .background(
-                        when (device.status) {
-                            "active" -> AccentGreen.copy(alpha = 0.1f)
-                            "blocked" -> AccentRed.copy(alpha = 0.1f)
-                            "connecting" -> AccentAmber.copy(alpha = 0.1f)
-                            else -> Color.Gray.copy(alpha = 0.1f)
-                        },
-                        RoundedCornerShape(4.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = when (device.status) {
-                            "active" -> AccentGreen.copy(alpha = 0.2f)
-                            "blocked" -> AccentRed.copy(alpha = 0.2f)
-                            "connecting" -> AccentAmber.copy(alpha = 0.2f)
-                            else -> Color.Gray.copy(alpha = 0.2f)
-                        },
-                        shape = RoundedCornerShape(4.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            // Split Action Buttons at bottom of card
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = device.status.uppercase(),
-                    color = when (device.status) {
-                        "active" -> AccentGreen
-                        "blocked" -> AccentRed
-                        "connecting" -> AccentAmber
-                        else -> Color.Gray
-                    },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace
-                )
+                // View Screen (Liquid Glass Vibrant Button)
+                Button(
+                    onClick = onViewScreen,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .background(GlassButtonGradient, RoundedCornerShape(8.dp))
+                        .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(8.dp)),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ScreenShare,
+                        contentDescription = "View Screen",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "View Screen",
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // More Options (Frosted Glass Button)
+                OutlinedButton(
+                    onClick = onMoreOptions,
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorderBrush),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = SurfaceAlt,
+                        contentColor = TextPrimary
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "More Options",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "More Options",
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            // Open Control Center cue
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Open Device Control Center",
-                tint = TextSecondary.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
@@ -960,6 +1274,7 @@ fun DeviceControlsScreen(
     onCameraClick: () -> Unit,
     onScreenClick: () -> Unit
 ) {
+    val context = LocalContext.current
     var showRemoveDialog by remember { mutableStateOf(false) }
 
     if (showRemoveDialog) {
@@ -1018,7 +1333,7 @@ fun DeviceControlsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg),
+            .background(Color.Transparent),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
@@ -1027,7 +1342,7 @@ fun DeviceControlsScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-        // Header
+        // Top App Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1040,779 +1355,1128 @@ fun DeviceControlsScreen(
                 IconButton(
                     onClick = onDismiss,
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
+                        .background(SurfaceAlt, CircleShape)
+                        .border(1.dp, Border, CircleShape)
                         .size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Go Back",
                         tint = TextPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 Column {
                     Text(
-                        text = "DEVICE CONTROL CENTER",
+                        text = device.name,
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
+                            contentDescription = "Battery Status",
+                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else TextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "${device.batteryLevel}%${if (device.isCharging) " (Charging)" else ""}",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            // Active Pill (Mint emerald / red)
+            Box(
+                modifier = Modifier
+                    .background(
+                        when (device.status) {
+                            "online", "active" -> AccentGreen.copy(alpha = 0.15f)
+                            "blocked" -> AccentRed.copy(alpha = 0.15f)
+                            else -> AccentAmber.copy(alpha = 0.15f)
+                        },
+                        RoundedCornerShape(100.dp)
+                    )
+                    .border(
+                        1.dp,
+                        when (device.status) {
+                            "online", "active" -> AccentGreen.copy(alpha = 0.3f)
+                            "blocked" -> AccentRed.copy(alpha = 0.3f)
+                            else -> AccentAmber.copy(alpha = 0.3f)
+                        },
+                        RoundedCornerShape(100.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(
+                                when (device.status) {
+                                    "online", "active" -> AccentGreen
+                                    "blocked" -> AccentRed
+                                    else -> AccentAmber
+                                },
+                                CircleShape
+                            )
+                    )
+                    Text(
+                        text = if (device.status == "online" || device.status == "active") "ONLINE" else device.status.uppercase(),
+                        color = when (device.status) {
+                            "online", "active" -> AccentGreen
+                            "blocked" -> AccentRed
+                            else -> AccentAmber
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        var selectedTab by remember { mutableIntStateOf(0) }
+        val tabList = listOf("Live Feeds", "Command Hub", "Lock Studio", "Audit Logs")
+
+        var activeTheme by remember(device.lockTheme) { mutableStateOf(device.lockTheme) }
+        var activeIcon by remember(device.lockWarningIcon) { mutableStateOf(device.lockWarningIcon) }
+        var activeWallpaper by remember(device.lockWallpaper) { mutableStateOf(device.lockWallpaper) }
+
+        var adminChatMessages by remember { mutableStateOf<List<com.example.data.ChatMessage>>(emptyList()) }
+        var adminChatInputText by remember { mutableStateOf("") }
+        var operationLogs by remember { mutableStateOf<List<com.example.data.AdminLog>>(emptyList()) }
+
+        // Persistent listeners for real-time Firebase telemetry & sync
+        DisposableEffect(device.ip) {
+            val chatRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                .getReference("devices").child(device.ip).child("chat")
+            val chatListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val list = mutableListOf<com.example.data.ChatMessage>()
+                    for (child in snapshot.children) {
+                        val id = child.child("id").getValue(String::class.java) ?: ""
+                        val sender = child.child("sender").getValue(String::class.java) ?: ""
+                        val msg = child.child("message").getValue(String::class.java) ?: ""
+                        val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                        list.add(com.example.data.ChatMessage(id, sender, msg, ts))
+                    }
+                    adminChatMessages = list.sortedBy { it.timestamp }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            }
+            chatRef.addValueEventListener(chatListener)
+
+            val logsRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                .getReference("devices").child(device.ip).child("logs")
+            val logsListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val list = mutableListOf<com.example.data.AdminLog>()
+                    for (child in snapshot.children) {
+                        val id = child.child("id").getValue(String::class.java) ?: ""
+                        val action = child.child("action").getValue(String::class.java) ?: ""
+                        val details = child.child("details").getValue(String::class.java) ?: ""
+                        val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                        list.add(com.example.data.AdminLog(id, action, details, ts))
+                    }
+                    operationLogs = list.sortedByDescending { it.timestamp }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            }
+            logsRef.addValueEventListener(logsListener)
+
+            onDispose {
+                chatRef.removeEventListener(chatListener)
+                logsRef.removeEventListener(logsListener)
+            }
+        }
+
+        // 4-Tab Navigation Bar
+        ScrollableTabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Surface,
+            contentColor = AccentBlue,
+            edgePadding = 0.dp,
+            divider = { HorizontalDivider(color = Border, thickness = 1.dp) },
+            indicator = { tabPositions ->
+                if (selectedTab < tabPositions.size) {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = AccentBlue,
+                        height = 2.dp
+                    )
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Border, RoundedCornerShape(10.dp))
+        ) {
+            tabList.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = {
+                        Text(
+                            text = title,
+                            color = if (selectedTab == index) AccentBlue else TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Content Scrollable Column based on active Tab
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            when (selectedTab) {
+                0 -> {
+                    // TAB 1: Live Feeds
+                    // 1. Live Screen Stream Card
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp))
+                            .clickable { onScreenClick() }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(AccentPurple.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ScreenShare,
+                                        contentDescription = "Screen Stream",
+                                        tint = AccentPurple,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "LIVE SCREEN STREAM",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Low-latency live visual feed in RAM",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = TextSecondary
+                            )
+                        }
+                    }
+
+                    // 2. Camera Feed Card
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp))
+                            .clickable { onCameraClick() }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Videocam,
+                                        contentDescription = "Camera Feed",
+                                        tint = AccentBlue,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "LIVE CAMERA FEED",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Front / Rear sensor streaming",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = TextSecondary
+                            )
+                        }
+                    }
+
+                    // 3. Mini-map with coordinates and "Play Finder Sound"
+                    FindMyDeviceMapCard(device = device, viewModel = viewModel)
+                }
+
+                1 -> {
+                    // TAB 2: Command Hub
+                    Text(
+                        text = "SECURITY INTERVENTIONS",
                         color = AccentBlue,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${device.name}",
-                        color = TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
 
-            Box(
-                modifier = Modifier
-                    .background(
-                        when (device.status) {
-                            "online" -> AccentGreen.copy(alpha = 0.15f)
-                            "blocked" -> AccentRed.copy(alpha = 0.15f)
-                            else -> Color.White.copy(alpha = 0.05f)
-                        },
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = device.status.uppercase(),
-                    color = when (device.status) {
-                        "online" -> AccentGreen
-                        "blocked" -> AccentRed
-                        else -> TextSecondary
-                    },
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Border))
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Content Scrollable Column!
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-                        // 1. Connection Actions (Buttons)
-                        Text(
-                            text = "COMMAND HUB",
-                            color = AccentBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            if (device.status == "offline" || device.status == "connecting") {
-                                Button(
-                                    onClick = { viewModel.retryConnect(device.ip) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    enabled = device.status != "connecting"
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = null,
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        if (device.status == "connecting") "CONNECTING..." else "RETRY CONNECTION",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextPrimary,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            } else {
-                                Button(
-                                    onClick = {
-                                        onBlockClick()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = null,
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        "BLOCK SCREEN",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextPrimary,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-
-                                Button(
-                                    onClick = { viewModel.unblockScreen(device.ip) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    enabled = device.status == "blocked"
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LockOpen,
-                                        contentDescription = null,
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        "UNBLOCK",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = Color.Black,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        if (device.status != "offline" && device.status != "connecting") {
+                    // Block / Unblock / Retry
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (device.status == "offline" || device.status == "connecting") {
                             Button(
-                                onClick = onScreenClick,
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ScreenShare,
-                                        contentDescription = "View Live Screen",
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "VIEW LIVE SCREEN STREAM",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextPrimary,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            }
-
-                            Button(
-                                onClick = onCameraClick,
+                                onClick = { viewModel.retryConnect(device.ip) },
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = device.status != "connecting"
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (device.status == "connecting") "CONNECTING..." else "RETRY CONNECTION",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = TextPrimary,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = onBlockClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "BLOCK SCREEN",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = TextPrimary,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.unblockScreen(device.ip) },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = device.status == "blocked"
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LockOpen,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "UNBLOCK",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Loud Finder Sound Card
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Finder Sound",
+                                        tint = AccentAmber,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "LOUD FINDER SOUND",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (device.ringRequested) "Alarm ringing on target device" else "Trigger high-volume emergency alert",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = { viewModel.toggleRing(device.ip, !device.ringRequested) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (device.ringRequested) AccentRed else AccentAmber
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text(
+                                    text = if (device.ringRequested) "STOP" else "RING",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (device.ringRequested) TextPrimary else Color.Black,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Voice Broadcast & Text-To-Speech Card for this target device
+                    var deviceTtsText by remember(device.ip) { mutableStateOf("") }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Campaign,
+                                        contentDescription = "Voice Broadcast",
+                                        tint = AccentAmber,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "VOICE BROADCAST (TTS)",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Type text to read aloud on this device via TTS",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+
+                            // Quick preset chips
+                            val targetPresets = listOf(
+                                "Dinner is ready! 🍽️",
+                                "Screen time is up! ⏳",
+                                "Please call me back. 📞",
+                                "Come here right now. 🏃"
+                            )
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(targetPresets) { preset ->
+                                    Surface(
+                                        color = SurfaceAlt,
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .border(1.dp, Border, RoundedCornerShape(14.dp))
+                                            .clickable { deviceTtsText = preset }
+                                    ) {
+                                        Text(
+                                            text = preset,
+                                            color = TextPrimary,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = deviceTtsText,
+                                onValueChange = { deviceTtsText = it },
+                                placeholder = { Text("Type announcement for ${device.name}...", color = TextSecondary, fontSize = 12.sp) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = SurfaceAlt,
+                                    unfocusedContainerColor = SurfaceAlt,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    focusedBorderColor = AccentAmber,
+                                    unfocusedBorderColor = Border
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 3
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (deviceTtsText.isNotBlank()) {
+                                            com.example.tts.TextToSpeechManager.speak(context, deviceTtsText)
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Type text to test audio preview", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("TEST AUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (deviceTtsText.isNotBlank()) {
+                                            val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
+                                            com.example.network.FirebaseManager.sendBroadcastAnnouncement(
+                                                listOf(device.ip),
+                                                deviceTtsText,
+                                                adminName
+                                            )
+                                            android.widget.Toast.makeText(context, "📢 Voice announcement sent to ${device.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                            deviceTtsText = ""
+                                        }
+                                    },
+                                    enabled = deviceTtsText.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("SPEAK ON DEVICE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            }
+                        }
+                    }
+
+                    // Device Telemetry Metrics
+                    Text(
+                        text = "DEVICE TELEMETRY METRICS",
+                        color = AccentBlue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Videocam,
-                                        contentDescription = null,
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(18.dp)
+                                        imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
+                                        contentDescription = "Battery Status",
+                                        tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else AccentAmber,
+                                        modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "VIEW LIVE CAMERA FEED",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextPrimary,
-                                        letterSpacing = 0.5.sp
-                                    )
+                                    Text("Battery Status", color = TextSecondary, fontSize = 12.sp)
                                 }
-                            }
-                        }
-
-                        // 2. Telemetry Section
-                        Text(
-                            text = "LIVE DEVICE TELEMETRY",
-                            color = AccentBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
-                                            contentDescription = "Battery Status",
-                                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else AccentAmber,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text("Battery Status", color = TextSecondary, fontSize = 12.sp)
-                                    }
-                                    Text(
-                                        text = "${if (device.isCharging) "⚡ " else "🔌 "}${device.batteryLevel}%",
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Smartphone,
-                                            contentDescription = "Active App",
-                                            tint = AccentBlue,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text("Active App", color = TextSecondary, fontSize = 12.sp)
-                                    }
-                                    Text(
-                                        text = device.activeApp,
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.VolumeUp,
-                                            contentDescription = "Ringer Mode",
-                                            tint = AccentGreen,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text("Audio Mode", color = TextSecondary, fontSize = 12.sp)
-                                    }
-                                    Text(
-                                        text = device.ringerMode,
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-
-                        // GPS Map and Find My Device Locating
-                        FindMyDeviceMapCard(device = device, viewModel = viewModel)
-
-                        // 3. Lock Screen Customization Editor
-                        Text(
-                            text = "LOCK SCREEN DESIGNER STUDIO",
-                            color = AccentBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                var activeTheme by remember(device.lockTheme) { mutableStateOf(device.lockTheme) }
-                                var activeIcon by remember(device.lockWarningIcon) { mutableStateOf(device.lockWarningIcon) }
-                                var activeWallpaper by remember(device.lockWallpaper) { mutableStateOf(device.lockWallpaper) }
-
-                                Text("Lock Theme", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    listOf("slate", "cyberpunk", "stealth").forEach { t ->
-                                        val isSel = activeTheme == t
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .background(
-                                                    if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                                                    RoundedCornerShape(8.dp)
-                                                )
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = if (isSel) AccentBlue else Border,
-                                                    shape = RoundedCornerShape(8.dp)
-                                                )
-                                                .clickable { activeTheme = t }
-                                                .padding(vertical = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(t.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Warning Icon", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    listOf("lock", "biohazard", "warning", "hourglass").forEach { iName ->
-                                        val isSel = activeIcon == iName
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .background(
-                                                    if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                                                    RoundedCornerShape(8.dp)
-                                                )
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = if (isSel) AccentBlue else Border,
-                                                    shape = RoundedCornerShape(8.dp)
-                                                )
-                                                .clickable { activeIcon = iName }
-                                                .padding(vertical = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(iName.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Wallpaper Backdrop (Abstract URL)", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                OutlinedTextField(
-                                    value = activeWallpaper,
-                                    onValueChange = { activeWallpaper = it },
-                                    placeholder = { Text("https://example.com/wallpaper.jpg", fontSize = 11.sp, color = Color.Gray) },
-                                    singleLine = true,
-                                    textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = AccentBlue,
-                                        unfocusedBorderColor = Border
-                                    ),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
+                                Text(
+                                    text = "${if (device.isCharging) "⚡ " else "🔌 "}${device.batteryLevel}%",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Smartphone,
+                                        contentDescription = "Active App",
+                                        tint = AccentBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Active App", color = TextSecondary, fontSize = 12.sp)
+                                }
+                                Text(
+                                    text = device.activeApp,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Ringer Mode",
+                                        tint = AccentGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Audio Mode", color = TextSecondary, fontSize = 12.sp)
+                                }
+                                Text(
+                                    text = device.ringerMode,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
 
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.updateLockStyle(device.ip, activeTheme, activeWallpaper, activeIcon)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                    shape = RoundedCornerShape(8.dp),
+                    // Admin Chat Terminal (Only visible if blocked)
+                    if (device.status == "blocked") {
+                        Text(
+                            text = "ADMINISTRATOR RECON CHAT TERMINAL",
+                            color = AccentBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Surface),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Border, RoundedCornerShape(12.dp)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(36.dp)
+                                        .height(130.dp)
+                                        .background(SurfaceAlt, RoundedCornerShape(8.dp))
+                                        .border(1.dp, Border, RoundedCornerShape(8.dp))
+                                        .padding(8.dp)
                                 ) {
-                                    Text("APPLY VISUAL STYLE", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        // 4. Admin Chat Terminal (Only visible if the user device screen is blocked)
-                        if (device.status == "blocked") {
-                            Text(
-                                text = "ADMINISTRATOR RECON CHAT TERMINAL",
-                                color = AccentBlue,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.sp
-                            )
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Surface),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, Border, RoundedCornerShape(12.dp))
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    var adminChatMessages by remember { mutableStateOf<List<com.example.data.ChatMessage>>(emptyList()) }
-                                    var adminChatInputText by remember { mutableStateOf("") }
-
-                                    DisposableEffect(device.ip) {
-                                        val chatRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
-                                            .getReference("devices").child(device.ip).child("chat")
-                                        val listener = object : ValueEventListener {
-                                            override fun onDataChange(snapshot: DataSnapshot) {
-                                                val list = mutableListOf<com.example.data.ChatMessage>()
-                                                for (child in snapshot.children) {
-                                                    val id = child.child("id").getValue(String::class.java) ?: ""
-                                                    val sender = child.child("sender").getValue(String::class.java) ?: ""
-                                                    val msg = child.child("message").getValue(String::class.java) ?: ""
-                                                    val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                                                    list.add(com.example.data.ChatMessage(id, sender, msg, ts))
-                                                }
-                                                adminChatMessages = list.sortedBy { it.timestamp }
+                                    if (adminChatMessages.isEmpty()) {
+                                        Text(
+                                            text = "No logs. Set a text line below and transmit to the block screen.",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    } else {
+                                        val lazyListState = rememberLazyListState()
+                                        LaunchedEffect(adminChatMessages.size) {
+                                            if (adminChatMessages.isNotEmpty()) {
+                                                lazyListState.animateScrollToItem(adminChatMessages.size - 1)
                                             }
-                                            override fun onCancelled(error: DatabaseError) {}
                                         }
-                                        chatRef.addValueEventListener(listener)
-                                        onDispose {
-                                            chatRef.removeEventListener(listener)
-                                        }
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(130.dp)
-                                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                            .padding(8.dp)
-                                    ) {
-                                        if (adminChatMessages.isEmpty()) {
-                                            Text(
-                                                text = "No logs. Set a text line below and transmit to the block screen.",
-                                                color = TextSecondary,
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.align(Alignment.Center)
-                                            )
-                                        } else {
-                                            val lazyListState = rememberLazyListState()
-                                            LaunchedEffect(adminChatMessages.size) {
-                                                if (adminChatMessages.isNotEmpty()) {
-                                                    lazyListState.animateScrollToItem(adminChatMessages.size - 1)
-                                                }
-                                            }
-                                            LazyColumn(
-                                                state = lazyListState,
-                                                modifier = Modifier.fillMaxSize(),
-                                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                items(adminChatMessages) { msg ->
-                                                    val isMe = msg.sender == "admin"
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                                        LazyColumn(
+                                            state = lazyListState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            items(adminChatMessages) { msg ->
+                                                val isMe = msg.sender == "admin"
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .background(
+                                                                color = if (isMe) AccentBlue.copy(alpha = 0.8f) else SurfaceAlt,
+                                                                shape = RoundedCornerShape(
+                                                                    topStart = 14.dp,
+                                                                    topEnd = 14.dp,
+                                                                    bottomStart = if (isMe) 14.dp else 2.dp,
+                                                                    bottomEnd = if (isMe) 2.dp else 14.dp
+                                                                )
+                                                            )
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color = if (isMe) AccentBlue else Border,
+                                                                shape = RoundedCornerShape(
+                                                                    topStart = 14.dp,
+                                                                    topEnd = 14.dp,
+                                                                    bottomStart = if (isMe) 14.dp else 2.dp,
+                                                                    bottomEnd = if (isMe) 2.dp else 14.dp
+                                                                )
+                                                            )
+                                                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                                                            .widthIn(max = 200.dp)
                                                     ) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .background(
-                                                                    color = if (isMe) AccentBlue.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.1f),
-                                                                    shape = RoundedCornerShape(
-                                                                        topStart = 14.dp,
-                                                                        topEnd = 14.dp,
-                                                                        bottomStart = if (isMe) 14.dp else 2.dp,
-                                                                        bottomEnd = if (isMe) 2.dp else 14.dp
-                                                                    )
-                                                                )
-                                                                .border(
-                                                                    width = 1.dp,
-                                                                    color = if (isMe) AccentBlue else Border.copy(alpha = 0.4f),
-                                                                    shape = RoundedCornerShape(
-                                                                        topStart = 14.dp,
-                                                                        topEnd = 14.dp,
-                                                                        bottomStart = if (isMe) 14.dp else 2.dp,
-                                                                        bottomEnd = if (isMe) 2.dp else 14.dp
-                                                                    )
-                                                                )
-                                                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                                                                .widthIn(max = 200.dp)
-                                                        ) {
-                                                            Column {
-                                                                Text(
-                                                                    text = if (isMe) "Admin (You)" else "User",
-                                                                    color = if (isMe) Color.White.copy(alpha = 0.8f) else Color(0xFF90A4AE),
-                                                                    fontSize = 8.sp,
-                                                                    fontWeight = FontWeight.Bold
-                                                                )
-                                                                Spacer(modifier = Modifier.height(2.dp))
-                                                                Text(
-                                                                    text = msg.message,
-                                                                    color = Color.White,
-                                                                    fontSize = 11.sp
-                                                                )
-                                                            }
+                                                        Column {
+                                                            Text(
+                                                                text = if (isMe) "Admin (You)" else "User",
+                                                                color = if (isMe) TextPrimary.copy(alpha = 0.8f) else TextSecondary,
+                                                                fontSize = 8.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                            Spacer(modifier = Modifier.height(2.dp))
+                                                            Text(
+                                                                text = msg.message,
+                                                                color = TextPrimary,
+                                                                fontSize = 11.sp
+                                                            )
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        OutlinedTextField(
-                                            value = adminChatInputText,
-                                            onValueChange = { adminChatInputText = it },
-                                            placeholder = { Text("Type reply...", color = Color.Gray, fontSize = 11.sp) },
-                                            singleLine = true,
-                                            textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedBorderColor = AccentBlue,
-                                                unfocusedBorderColor = Border
-                                            ),
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(10.dp)
-                                        )
-
-                                        IconButton(
-                                            onClick = {
-                                                if (adminChatInputText.trim().isNotEmpty()) {
-                                                    viewModel.sendAdminMessage(device.ip, adminChatInputText.trim())
-                                                    adminChatInputText = ""
-                                                }
-                                            },
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .background(AccentBlue, CircleShape)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Send,
-                                                contentDescription = "Send Message",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 5. Operational Logs List with Scroll Box and Clear logs button
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "ADMIN COMMAND OPERATIONAL LOGS",
-                                color = AccentBlue,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.sp
-                            )
-                            TextButton(
-                                onClick = {
-                                    viewModel.clearLogs(device.ip)
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Clear Logs",
-                                    tint = AccentRed,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("CLEAR LOGS", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                var operationLogs by remember { mutableStateOf<List<com.example.data.AdminLog>>(emptyList()) }
-
-                                DisposableEffect(device.ip) {
-                                    val logsRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
-                                        .getReference("devices").child(device.ip).child("logs")
-                                    val listener = object : ValueEventListener {
-                                        override fun onDataChange(snapshot: DataSnapshot) {
-                                            val list = mutableListOf<com.example.data.AdminLog>()
-                                            for (child in snapshot.children) {
-                                                val id = child.child("id").getValue(String::class.java) ?: ""
-                                                val action = child.child("action").getValue(String::class.java) ?: ""
-                                                val details = child.child("details").getValue(String::class.java) ?: ""
-                                                val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                                                list.add(com.example.data.AdminLog(id, action, details, ts))
-                                            }
-                                            operationLogs = list.sortedByDescending { it.timestamp }
-                                        }
-                                        override fun onCancelled(error: DatabaseError) {}
-                                    }
-                                    logsRef.addValueEventListener(listener)
-                                    onDispose {
-                                        logsRef.removeEventListener(listener)
-                                    }
                                 }
 
-                                if (operationLogs.isEmpty()) {
-                                    Text(
-                                        text = "No operational logs has been captured yet.",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 12.dp)
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = adminChatInputText,
+                                        onValueChange = { adminChatInputText = it },
+                                        placeholder = { Text("Type reply...", color = TextSecondary, fontSize = 11.sp) },
+                                        singleLine = true,
+                                        textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = AccentBlue,
+                                            unfocusedBorderColor = Border
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
                                     )
-                                } else {
-                                    // Make logs box scrollable inside! The user asked: "dont expand the box when its more logs just make it scrollable inside the box"
+
+                                    IconButton(
+                                        onClick = {
+                                            if (adminChatInputText.trim().isNotEmpty()) {
+                                                viewModel.sendAdminMessage(device.ip, adminChatInputText.trim())
+                                                adminChatInputText = ""
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(AccentBlue, CircleShape)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Send,
+                                            contentDescription = "Send Message",
+                                            tint = TextPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                2 -> {
+                    // TAB 3: Lock Studio
+                    Text(
+                        text = "LOCK SCREEN DESIGNER STUDIO",
+                        color = AccentBlue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("Lock Theme", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("slate", "cyberpunk", "stealth").forEach { t ->
+                                    val isSel = activeTheme == t
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(150.dp)
+                                            .weight(1f)
+                                            .background(
+                                                if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isSel) AccentBlue else Border,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { activeTheme = t }
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        LazyColumn(
-                                            modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            items(operationLogs) { item ->
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(6.dp)
-                                                            .background(
-                                                                when (item.action) {
-                                                                    "LOCK", "GEOFENCE_VIOLATION" -> AccentRed
-                                                                    "UNLOCK" -> AccentGreen
-                                                                    else -> AccentBlue
-                                                                },
-                                                                CircleShape
-                                                            )
-                                                            .align(Alignment.CenterVertically)
-                                                    )
-                                                    Column(modifier = Modifier.weight(1f)) {
-                                                        Text(
-                                                            text = "${item.action} • ${item.details}",
-                                                            color = TextPrimary,
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Medium
-                                                        )
-                                                        val date = java.util.Date(item.timestamp)
-                                                        val timeStr = java.text.SimpleDateFormat(
-                                                            "hh:mm a",
-                                                            java.util.Locale.getDefault()
-                                                        ).format(date)
-                                                        Text(
-                                                            text = "Timestamp: $timeStr",
-                                                            color = TextSecondary,
-                                                            fontSize = 9.sp,
-                                                            fontFamily = FontFamily.Monospace
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        Text(t.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
-                        }
 
-                        // Danger Zone / Remove Device trigger section
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Warning Icon", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("lock", "biohazard", "warning", "hourglass").forEach { iName ->
+                                    val isSel = activeIcon == iName
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .background(
+                                                if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isSel) AccentBlue else Border,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { activeIcon = iName }
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(iName.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Wallpaper Backdrop (Abstract URL)", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            OutlinedTextField(
+                                value = activeWallpaper,
+                                onValueChange = { activeWallpaper = it },
+                                placeholder = { Text("https://example.com/wallpaper.jpg", fontSize = 11.sp, color = TextSecondary) },
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AccentBlue,
+                                    unfocusedBorderColor = Border
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.updateLockStyle(device.ip, activeTheme, activeWallpaper, activeIcon)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                            ) {
+                                Text("APPLY VISUAL STYLE", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                3 -> {
+                    // TAB 4: Audit Logs
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "DANGER ZONE",
-                            color = AccentRed,
+                            text = "ADMIN COMMAND AUDIT LOGS",
+                            color = AccentBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, AccentRed.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        TextButton(
+                            onClick = {
+                                viewModel.clearLogs(device.ip)
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Clear Logs",
+                                tint = AccentRed,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("CLEAR LOGS", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            if (operationLogs.isEmpty()) {
                                 Text(
-                                    text = "Permanently remove this device from the telemetry mesh. The client device will instantly stop background location, active frames sync, and remote security tasks.",
+                                    text = "No operational logs captured yet.",
                                     color = TextSecondary,
-                                    fontSize = 12.sp
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp)
                                 )
-                                Button(
-                                    onClick = { showRemoveDialog = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                                    shape = RoundedCornerShape(8.dp)
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Device",
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "REMOVE DEVICE FROM MONITOR",
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextPrimary,
-                                        fontSize = 11.sp
-                                    )
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        items(operationLogs) { item ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .background(
+                                                            when (item.action) {
+                                                                "LOCK", "GEOFENCE_VIOLATION" -> AccentRed
+                                                                "UNLOCK" -> AccentGreen
+                                                                else -> AccentBlue
+                                                            },
+                                                            CircleShape
+                                                        )
+                                                        .align(Alignment.CenterVertically)
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = "${item.action} • ${item.details}",
+                                                        color = TextPrimary,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    val date = java.util.Date(item.timestamp)
+                                                    val timeStr = java.text.SimpleDateFormat(
+                                                        "hh:mm a",
+                                                        java.util.Locale.getDefault()
+                                                    ).format(date)
+                                                    Text(
+                                                        text = "Timestamp: $timeStr",
+                                                        color = TextSecondary,
+                                                        fontSize = 9.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                }
+            }
+
+            // Danger Zone / Unpair Device at the bottom
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AccentRed.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "DANGER ZONE",
+                        color = AccentRed,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "Unpair and permanently remove this device from monitoring. The client device will cease telemetry, background sync, and security locks.",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                    OutlinedButton(
+                        onClick = { showRemoveDialog = true },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentRed.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = AccentRed.copy(alpha = 0.08f),
+                            contentColor = AccentRed
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Unpair Device",
+                            tint = AccentRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "UNPAIR DEVICE",
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = AccentRed,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+        }
         }
     }
 }
@@ -2231,56 +2895,69 @@ fun AdminBottomBar(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    NavigationBar(
-        containerColor = Surface,
-        tonalElevation = 8.dp,
-        modifier = Modifier.border(width = (0.5).dp, color = Border)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .navigationBarsPadding(),
+        contentAlignment = Alignment.Center
     ) {
-        NavigationBarItem(
-            selected = currentScreen == "dashboard",
-            onClick = onNavigateToDashboard,
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = "Control Center"
+        NavigationBar(
+            containerColor = Surface,
+            tonalElevation = 0.dp,
+            modifier = Modifier
+                .widthIn(max = 500.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(LiquidGlassGlareGradient)
+                .border(width = 1.2.dp, brush = LiquidGlassChromaticBorder, shape = RoundedCornerShape(22.dp))
+        ) {
+            NavigationBarItem(
+                selected = currentScreen == "dashboard",
+                onClick = onNavigateToDashboard,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = "Control Center"
+                    )
+                },
+                label = {
+                    Text(
+                        "Control Panel",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = AccentBlue,
+                    unselectedIconColor = TextSecondary,
+                    indicatorColor = AccentBlue.copy(alpha = 0.15f)
                 )
-            },
-            label = {
-                Text(
-                    "Control Panel",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp
-                )
-            },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = AccentBlue,
-                unselectedIconColor = TextSecondary,
-                indicatorColor = AccentBlue.copy(alpha = 0.1f)
             )
-        )
 
-        NavigationBarItem(
-            selected = currentScreen == "settings",
-            onClick = onNavigateToSettings,
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings"
+            NavigationBarItem(
+                selected = currentScreen == "settings",
+                onClick = onNavigateToSettings,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings"
+                    )
+                },
+                label = {
+                    Text(
+                        "Settings",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = AccentBlue,
+                    unselectedIconColor = TextSecondary,
+                    indicatorColor = AccentBlue.copy(alpha = 0.15f)
                 )
-            },
-            label = {
-                Text(
-                    "Settings",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp
-                )
-            },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = AccentBlue,
-                unselectedIconColor = TextSecondary,
-                indicatorColor = AccentBlue.copy(alpha = 0.1f)
             )
-        )
+        }
     }
 }
 
@@ -2708,7 +3385,7 @@ fun CameraStreamModal(
                 }
             }
         },
-        containerColor = Color(0xFF0F0F12),
+        containerColor = Color(0xFF000000),
         shape = RoundedCornerShape(16.dp)
     )
 }
@@ -2899,7 +3576,7 @@ fun ScreenStreamModal(
                             .height(frameHeight)
                             .aspectRatio(9f / 16f, matchHeightConstraintsFirst = true)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF07070A))
+                            .background(Color(0xFF000000))
                             .border(
                                 1.dp,
                                 if (currentBitmap != null) AccentGreen.copy(alpha = 0.4f) else Border,
@@ -3037,7 +3714,7 @@ fun ScreenStreamModal(
             }
         }
         },
-        containerColor = Color(0xFF0F0F14),
+        containerColor = Color(0xFF000000),
         shape = RoundedCornerShape(20.dp)
     )
 }
@@ -4708,7 +5385,7 @@ fun FindMyDeviceMapCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
-                    .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF000000), RoundedCornerShape(8.dp))
                     .border(1.dp, Border, RoundedCornerShape(8.dp))
             ) {
                 // Interactive OpenStreetMap render using WebView!

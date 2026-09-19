@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/device_control_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_ios_mesh_gradient"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <!-- Top App Bar in Elevated Liquid Glass Bar -->
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/control_top_bar_blur"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_ios_glass_card"
+        app:blurOverlayColor="@color/glass_overlay_color">
+
+        <RelativeLayout
+            android:id="@+id/control_top_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="12dp">
+
+            <ImageButton
+                android:id="@+id/btn_control_back"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_revert"
+                app:tint="@color/text_primary"
+                android:contentDescription="Back to Dashboard" />
+
+            <LinearLayout
+                android:id="@+id/control_title_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/btn_control_back"
+                android:layout_toStartOf="@id/control_status_group"
+                android:layout_marginStart="10dp"
+                android:layout_centerVertical="true"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_control_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DEVICE CONTROL"
+                    android:textColor="@color/primary_accent"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.14" />
+
+                <TextView
+                    android:id="@+id/tv_control_device_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pixel 8 Pro"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <!-- Right: Battery & Active Pill -->
+            <LinearLayout
+                android:id="@+id/control_status_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="end"
+                android:orientation="vertical">
+
+                <!-- Active Status Pill -->
+                <TextView
+                    android:id="@+id/tv_control_active_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_ios_glass_pill_emerald"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
+                    android:text="ONLINE"
+                    android:textColor="@color/success_telemetry"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+
+                <!-- Battery percentage indicator -->
+                <TextView
+                    android:id="@+id/tv_control_battery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="88% Battery"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </RelativeLayout>
+    </eightbitlab.com.blurview.BlurView>
+
+    <View
+        android:id="@+id/top_bar_divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#20FFFFFF" />
+
+    <!-- TabLayout: Tabs (Live Feeds, Command Hub, Lock Studio, Audit Logs) -->
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/tab_layout_blur_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_ios_glass_card"
+        app:blurOverlayColor="@color/glass_overlay_color">
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout_control"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:background="@android:color/transparent"
+            app:tabIndicatorColor="@color/primary_accent"
+            app:tabIndicatorHeight="3dp"
+            app:tabSelectedTextColor="@color/text_primary"
+            app:tabTextColor="@color/text_secondary"
+            app:tabMode="fixed"
+            app:tabGravity="fill"
+            app:tabTextAppearance="@android:style/TextAppearance.Material.Caption">
+
+            <com.google.android.material.tabs.TabItem
+                android:id="@+id/tab_live_feeds"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Live Feeds" />
+
+            <com.google.android.material.tabs.TabItem
+                android:id="@+id/tab_command_hub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Command Hub" />
+
+            <com.google.android.material.tabs.TabItem
+                android:id="@+id/tab_lock_studio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Lock Studio" />
+
+            <com.google.android.material.tabs.TabItem
+                android:id="@+id/tab_audit_logs"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Audit Logs" />
+        </com.google.android.material.tabs.TabLayout>
+    </eightbitlab.com.blurview.BlurView>
+
+    <View
+        android:id="@+id/tab_divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:background="#20FFFFFF" />
+
+    <!-- ViewPager2: elevated segmented display -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/view_pager_control"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Danger Zone: Place "Unpair Device" at the very bottom on an elevated frosted glass canvas -->
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/danger_zone_blur"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_ios_glass_card"
+        app:blurOverlayColor="@color/glass_overlay_color">
+
+        <LinearLayout
+            android:id="@+id/danger_zone_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:orientation="vertical">
+
+            <View
+                android:id="@+id/danger_zone_divider"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="12dp"
+                android:background="#20FFFFFF" />
+
+            <Button
+                android:id="@+id/btn_unpair_device"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_ios_glass_button_destructive"
+                android:text="Unpair Device"
+                android:textColor="@color/accent_destructive"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+        </LinearLayout>
+    </eightbitlab.com.blurview.BlurView>
+
+</LinearLayout>

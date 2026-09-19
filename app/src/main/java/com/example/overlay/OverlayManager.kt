@@ -907,7 +907,7 @@ fun LockOverlayLayout(
                 .height(drawerHeight)
                 .offset(y = drawerOffset)
                 .background(
-                    color = Color(0xF20F0D1C), // Deep premium crystal charcoal-amethyst M3 glassmorphism
+                    color = Color(0xF5000000), // Pure OLED pitch black frosted glass
                     shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
                 )
                 .border(
@@ -1282,7 +1282,7 @@ fun LockOverlayLayout(
         if (isFloatingChatOpen) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFA0F1420) // dark glass surface
+                    containerColor = Color(0xFA08080A) // pure black obsidian glass surface
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

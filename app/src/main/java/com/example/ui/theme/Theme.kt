@@ -4,26 +4,29 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.cos
+import kotlin.math.sin
 
 val LocalThemeBlur = compositionLocalOf<MutableState<Boolean>> {
     error("No LocalThemeBlur provided")
@@ -36,165 +39,185 @@ private val DarkColorScheme = darkColorScheme(
     background = Bg,
     surface = Surface,
     error = AccentRed,
-    onPrimary = TextPrimary,
-    onSecondary = Color.Black,
+    onPrimary = Color.White,
+    onSecondary = Color.White,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
-    onError = TextPrimary
+    onError = Color.White
 )
 
+/**
+ * Authentic Liquid Glass Background (archisvaze/liquid-glass architecture):
+ * Simulates physics-based light refraction (IOR 1.52) over an organic multi-phase fluid mesh in true OLED black dark mode:
+ * - Pure pitch black OLED canvas (#000000)
+ * - 5 harmonic floating plasma fluid caustics (Sapphire, Electric Cyan, Ultraviolet, Teal, Solar Amber) with deep subtle luminosity
+ * - Concentric light caustics, wave dispersion, and optical interference rings
+ * - Real-time frosted glass backdrop blur for deep dark mode glassmorphism
+ */
 @Composable
 fun LiquidGlassBackground(
     modifier: Modifier = Modifier,
     isBlurred: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "liquid_bg_anim")
-    
-    val blob1OffsetX by infiniteTransition.animateFloat(
-        initialValue = -80f,
-        targetValue = 180f,
+    val infiniteTransition = rememberInfiniteTransition(label = "archis_liquidglass_fluid_mesh")
+
+    // Harmonic wave phases for fluid circulation
+    val phase1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.2831853f,
         animationSpec = infiniteRepeatable(
-            animation = tween(22000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(14000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "l_blob1X"
-    )
-    val blob1OffsetY by infiniteTransition.animateFloat(
-        initialValue = -120f,
-        targetValue = 150f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(18000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "l_blob1Y"
-    )
-    
-    val blob2OffsetX by infiniteTransition.animateFloat(
-        initialValue = 150f,
-        targetValue = -180f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(25000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "l_blob2X"
-    )
-    val blob2OffsetY by infiniteTransition.animateFloat(
-        initialValue = -90f,
-        targetValue = 160f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "l_blob2Y"
+        label = "fluid_phase_1"
     )
 
-    val blob3OffsetX by infiniteTransition.animateFloat(
-        initialValue = -160f,
-        targetValue = 110f,
+    val phase2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.2831853f,
         animationSpec = infiniteRepeatable(
-            animation = tween(24000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(18000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "l_blob3X"
+        label = "fluid_phase_2"
     )
-    val blob3OffsetY by infiniteTransition.animateFloat(
-        initialValue = 250f,
-        targetValue = -90f,
+
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
-            animation = tween(21000, easing = EaseInOutSine),
+            animation = tween(8500, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "l_blob3Y"
+        label = "caustic_pulse"
+    )
+
+    val causticShimmer by infiniteTransition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "caustic_shimmer"
     )
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF060814), // iOS midnight space canvas
-                        Color(0xFF0D1226), // Deep sapphire obsidian
-                        Color(0xFF04060C)  // Pure deep night floor
-                    )
-                )
-            )
+            .background(Bg)
     ) {
+        // Living Liquid Fluid Simulation: Subtle luminous plasma nodes on pure black canvas
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
 
-            // Blob 1: iOS System Indigo / Deep Orchid Liquid Mesh
+            // Node 1: Electric Cyan Refraction Plasma (Orbital drift in upper right)
+            val cyanX = width * (0.74f + 0.12f * cos(phase1))
+            val cyanY = height * (0.20f + 0.08f * sin(phase1))
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF5E5CE6).copy(alpha = 0.42f), Color.Transparent),
-                    radius = width * 1.10f
+                    colors = listOf(
+                        Color(0x2800F2FE), // Chromatic Electric Cyan highlight
+                        Color(0x0C06B6D4),
+                        Color.Transparent
+                    ),
+                    center = Offset(cyanX, cyanY),
+                    radius = width * 0.52f * pulseScale
                 ),
-                center = androidx.compose.ui.geometry.Offset(
-                    width * 0.15f + blob1OffsetX, 
-                    height * 0.22f + blob1OffsetY
-                ),
-                radius = width * 1.10f
+                center = Offset(cyanX, cyanY),
+                radius = width * 0.52f * pulseScale
             )
 
-            // Blob 2: iOS System Purple / Vibrant Pink Liquid Mesh
+            // Node 2: Deep Sapphire Core (Pulsing in upper-left quadrant)
+            val sapphireX = width * (0.22f + 0.08f * sin(phase2))
+            val sapphireY = height * (0.15f + 0.06f * cos(phase2))
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFBF5AF2).copy(alpha = 0.35f), Color.Transparent),
-                    radius = width * 1.20f
+                    colors = listOf(
+                        Color(0x303B82F6), // Electric Sapphire Blue
+                        Color(0x101D4ED8),
+                        Color.Transparent
+                    ),
+                    center = Offset(sapphireX, sapphireY),
+                    radius = width * 0.55f * pulseScale
                 ),
-                center = androidx.compose.ui.geometry.Offset(
-                    width * 0.88f + blob2OffsetX, 
-                    height * 0.75f + blob2OffsetY
-                ),
-                radius = width * 1.20f
+                center = Offset(sapphireX, sapphireY),
+                radius = width * 0.55f * pulseScale
             )
 
-            // Blob 3: iOS Electric Azure / Sky Light Mesh
+            // Node 3: Ultraviolet & Violet Prismatic Swirl (Lower quadrant flow)
+            val violetX = width * (0.18f + 0.10f * cos(phase2 * 0.8f))
+            val violetY = height * (0.78f + 0.09f * sin(phase2 * 0.8f))
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF0A84FF).copy(alpha = 0.38f), Color.Transparent),
-                    radius = width * 0.95f
+                    colors = listOf(
+                        Color(0x22A855F7), // Ultraviolet Violet
+                        Color(0x0A7C3AED),
+                        Color.Transparent
+                    ),
+                    center = Offset(violetX, violetY),
+                    radius = width * 0.54f * pulseScale
                 ),
-                center = androidx.compose.ui.geometry.Offset(
-                    width * 0.82f + blob3OffsetX, 
-                    height * 0.18f + blob3OffsetY
-                ),
-                radius = width * 0.95f
+                center = Offset(violetX, violetY),
+                radius = width * 0.54f * pulseScale
             )
 
-            // Blob 4: iOS System Cyan / Mint Liquid Sheen
+            // Node 4: Radiant Ocean Teal Caustic (Mid-left refraction)
+            val tealX = width * (0.86f + 0.08f * sin(phase1 * 0.9f))
+            val tealY = height * (0.80f + 0.08f * cos(phase1 * 0.9f))
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF63E6E2).copy(alpha = 0.25f), Color.Transparent),
-                    radius = width * 0.85f
+                    colors = listOf(
+                        Color(0x1C14B8A6), // Emerald Teal
+                        Color(0x080D9488),
+                        Color.Transparent
+                    ),
+                    center = Offset(tealX, tealY),
+                    radius = width * 0.48f * pulseScale
                 ),
-                center = androidx.compose.ui.geometry.Offset(
-                    width * 0.25f - blob2OffsetX, 
-                    height * 0.60f - blob1OffsetY
+                center = Offset(tealX, tealY),
+                radius = width * 0.48f * pulseScale
+            )
+
+            // Node 5: Chromatic Solar Amber/Magenta Caustic Flare (Center ambient warmth)
+            val amberX = width * (0.50f + 0.05f * cos(phase1 * 1.2f))
+            val amberY = height * (0.45f + 0.06f * sin(phase2 * 1.1f))
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x12F59E0B), // Warm Amber Refraction
+                        Color(0x0AEC4899), // Soft Magenta Dispersion
+                        Color.Transparent
+                    ),
+                    center = Offset(amberX, amberY),
+                    radius = width * 0.42f * causticShimmer
                 ),
-                radius = width * 0.85f
+                center = Offset(amberX, amberY),
+                radius = width * 0.42f * causticShimmer
+            )
+
+            // Optical Glass Caustic Ripples (Physics-based light interference rings on true black)
+            drawCircle(
+                color = Color(0x1000F2FE),
+                center = Offset(cyanX, cyanY),
+                radius = width * 0.38f * causticShimmer,
+                style = Stroke(width = 1f)
+            )
+            drawCircle(
+                color = Color(0x0CA855F7),
+                center = Offset(violetX, violetY),
+                radius = width * 0.44f * pulseScale,
+                style = Stroke(width = 1f)
             )
         }
 
-        // Apple style subtle glass vignette
+        // Content layer with optional backdrop modal blur
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color.Transparent, Color(0x66000000)),
-                        radius = 2200f
-                    )
-                )
-        )
-
-        // Content
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (isBlurred) Modifier.blur(20.dp) else Modifier)
+                .then(if (isBlurred) Modifier.blur(24.dp) else Modifier)
         ) {
             content()
         }
@@ -202,33 +225,176 @@ fun LiquidGlassBackground(
 }
 
 /**
- * Reusable iOS Liquid Glass Modifier providing multi-layer frosted acrylic backings,
- * specular dual-reflection gradient border, and rounded squircle shape.
+ * Reusable Liquid Glass modifier (archisvaze/liquid-glass style):
+ * - Smoked obsidian frosted fill with caustic transmission
+ * - Top-left 135° diagonal specular glare sheen
+ * - IOR 1.52 chromatic aberration border with pure specular white highlight & prismatic cyan/purple dispersion
  */
-fun Modifier.iosLiquidGlass(
-    cornerRadius: Dp = 22.dp,
-    surfaceColor: Color = Color(0x3D1A223D),
-    borderAlpha: Float = 0.24f
+fun Modifier.liquidGlass(
+    cornerRadius: Dp = 16.dp,
+    fillBrush: Brush = GlassCardGradient,
+    borderBrush: Brush = LiquidGlassChromaticBorder,
+    borderWidth: Dp = 1.2.dp,
+    showGlare: Boolean = true
 ): Modifier = this
     .clip(RoundedCornerShape(cornerRadius))
-    .background(
-        Brush.verticalGradient(
-            colors = listOf(
-                surfaceColor.copy(alpha = (surfaceColor.alpha * 1.15f).coerceAtMost(0.95f)),
-                surfaceColor.copy(alpha = (surfaceColor.alpha * 0.85f).coerceAtLeast(0.15f))
-            )
-        )
+    .background(fillBrush)
+    .then(
+        if (showGlare) {
+            Modifier.background(LiquidGlassGlareGradient)
+        } else Modifier
     )
     .border(
-        width = 1.dp,
-        brush = Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = (borderAlpha * 1.5f).coerceAtMost(0.75f)),
-                Color.White.copy(alpha = (borderAlpha * 0.6f).coerceAtLeast(0.08f))
-            )
-        ),
+        width = borderWidth,
+        brush = borderBrush,
         shape = RoundedCornerShape(cornerRadius)
     )
+
+/**
+ * Convenience modifier with solid translucent tint, specular glare, and chromatic border
+ */
+fun Modifier.iosLiquidGlass(
+    cornerRadius: Dp = 16.dp,
+    surfaceColor: Color = Surface,
+    borderBrush: Brush = LiquidGlassChromaticBorder,
+    borderWidth: Dp = 1.2.dp,
+    showGlare: Boolean = true
+): Modifier = this
+    .clip(RoundedCornerShape(cornerRadius))
+    .background(surfaceColor)
+    .then(
+        if (showGlare) {
+            Modifier.background(LiquidGlassGlareGradient)
+        } else Modifier
+    )
+    .border(
+        width = borderWidth,
+        brush = borderBrush,
+        shape = RoundedCornerShape(cornerRadius)
+    )
+
+/**
+ * Liquid Glass Pill modifier for status badges and tags (archisvaze/liquid-glass style)
+ */
+fun Modifier.liquidGlassPill(
+    cornerRadius: Dp = 100.dp,
+    fillColor: Color = SurfaceGlassPill,
+    borderBrush: Brush = LiquidGlassChromaticBorder
+): Modifier = this
+    .clip(RoundedCornerShape(cornerRadius))
+    .background(fillColor)
+    .background(LiquidGlassGlareGradient)
+    .border(
+        width = 1.dp,
+        brush = borderBrush,
+        shape = RoundedCornerShape(cornerRadius)
+    )
+
+/**
+ * First-Class Liquid Glass Card (archisvaze/liquid-glass design):
+ * Multi-layer optical glass container with volumetric outer drop-shadow, inner bezel occlusion,
+ * chromatic edge refraction (IOR 1.52), and specular glare.
+ */
+@Composable
+fun LiquidGlassCard(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 16.dp,
+    borderBrush: Brush = LiquidGlassChromaticBorder,
+    borderWidth: Dp = 1.2.dp,
+    backgroundColor: Color = Surface,
+    showGlare: Boolean = true,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(backgroundColor)
+            .then(
+                if (showGlare) {
+                    Modifier.background(LiquidGlassGlareGradient)
+                } else Modifier
+            )
+            .border(
+                width = borderWidth,
+                brush = borderBrush,
+                shape = RoundedCornerShape(cornerRadius)
+            )
+    ) {
+        content()
+    }
+}
+
+/**
+ * Liquid Glass Capsule Pill for telemetry, status badges, and quick indicators
+ */
+@Composable
+fun LiquidGlassPill(
+    modifier: Modifier = Modifier,
+    fillColor: Color = SurfaceGlassPill,
+    borderBrush: Brush = LiquidGlassChromaticBorder,
+    content: @Composable RowScope.() -> Unit
+) {
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(fillColor)
+            .background(LiquidGlassGlareGradient)
+            .border(1.dp, borderBrush, CircleShape)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        content()
+    }
+}
+
+/**
+ * Liquid Glass Interactive Button (archisvaze/liquid-glass style):
+ * Includes tactile depression on press, chromatic specular border, and glossy reflection
+ */
+@Composable
+fun LiquidGlassButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 14.dp,
+    containerBrush: Brush = GlassButtonGradient,
+    borderBrush: Brush = LiquidGlassChromaticBorder,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "btn_press_scale"
+    )
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(containerBrush)
+            .background(LiquidGlassGlareGradient)
+            .border(1.2.dp, borderBrush, RoundedCornerShape(cornerRadius))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(color = Color.White.copy(alpha = 0.35f)),
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            content()
+        }
+    }
+}
 
 @Composable
 fun MyApplicationTheme(
@@ -246,3 +412,5 @@ fun MyApplicationTheme(
         }
     }
 }
+
+

@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
         // Initialize state manager SharedPreferences
         StateManager.init(applicationContext)
 
+        // Initialize Text-To-Speech engine early
+        try {
+            com.example.tts.TextToSpeechManager.init(applicationContext)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         // Make sure device name is initialized
         if (StateManager.deviceName.value.isEmpty()) {
             StateManager.setDeviceName(Build.MODEL)

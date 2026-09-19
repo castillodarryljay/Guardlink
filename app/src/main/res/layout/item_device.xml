@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/card_device_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_ios_glass_card"
+    app:blurOverlayColor="@color/glass_overlay_color">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Top Row: Icon, Name, Battery & Active Badge -->
+        <RelativeLayout
+            android:id="@+id/layout_device_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <!-- Device Icon in Frosted Pill -->
+            <ImageView
+                android:id="@+id/iv_device_type_icon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/bg_ios_glass_pill"
+                android:padding="9dp"
+                android:src="@android:drawable/ic_menu_call"
+                app:tint="@color/primary_accent"
+                android:contentDescription="Device Icon" />
+
+            <!-- Device Title & Truncated UUID -->
+            <LinearLayout
+                android:id="@+id/layout_device_titles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toEndOf="@id/iv_device_type_icon"
+                android:layout_toStartOf="@id/layout_device_badges"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_device_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pixel 8 Pro"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <!-- Truncated UUID display with inline copy action -->
+                <LinearLayout
+                    android:id="@+id/layout_device_uuid_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_device_uuid_truncated"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ID: ••••ae7f"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <ImageView
+                        android:id="@+id/iv_copy_uuid_btn"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="6dp"
+                        android:src="@android:drawable/ic_menu_save"
+                        app:tint="@color/text_secondary"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Copy Device ID" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Right: Battery & Status Badge -->
+            <LinearLayout
+                android:id="@+id/layout_device_badges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="end"
+                android:orientation="vertical">
+
+                <!-- Active Status Badge -->
+                <TextView
+                    android:id="@+id/tv_device_status_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_ios_glass_pill_emerald"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
+                    android:text="ACTIVE"
+                    android:textColor="@color/success_telemetry"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+
+                <!-- Battery percentage indicator -->
+                <LinearLayout
+                    android:id="@+id/layout_device_battery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/iv_battery_icon"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@android:drawable/ic_lock_idle_charging"
+                        app:tint="@color/success_telemetry"
+                        android:contentDescription="Battery indicator" />
+
+                    <TextView
+                        android:id="@+id/tv_device_battery_percent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="88%"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </RelativeLayout>
+
+        <!-- Subtle specular divider -->
+        <View
+            android:id="@+id/view_device_card_divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="12dp"
+            android:background="#20FFFFFF" />
+
+        <!-- Split Action Buttons: [View Screen] (Liquid Glass Blue) and [More Options] (Secondary Frosted Glass) -->
+        <LinearLayout
+            android:id="@+id/layout_device_card_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- [View Screen] (Liquid Glass Blue) -->
+            <Button
+                android:id="@+id/btn_view_screen"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_ios_glass_button_primary"
+                android:text="View Screen"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+
+            <!-- [More Options] (Secondary Frosted Glass) -->
+            <Button
+                android:id="@+id/btn_more_options"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_ios_glass_button_secondary"
+                android:text="More Options"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</eightbitlab.com.blurview.BlurView>

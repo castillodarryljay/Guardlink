@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/settings_coordinator_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_ios_mesh_gradient"
+    android:fitsSystemWindows="true">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/settings_scroll_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/settings_content_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Top Header in Apple Translucent Design -->
+            <LinearLayout
+                android:id="@+id/settings_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="20dp">
+
+                <ImageView
+                    android:id="@+id/iv_settings_icon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_ios_glass_pill"
+                    android:padding="9dp"
+                    android:src="@android:drawable/ic_menu_manage"
+                    app:tint="@color/primary_accent"
+                    android:contentDescription="Settings Header" />
+
+                <TextView
+                    android:id="@+id/tv_settings_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:text="GUARDLINK SETTINGS"
+                    android:textColor="@color/text_primary"
+                    android:textSize="19sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+            </LinearLayout>
+
+            <!-- 1. Hero Pairing Card: Elevated Frosted Liquid Glass Card -->
+            <TextView
+                android:id="@+id/tv_pairing_section_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="DEVICE PAIRING &amp; SYNC"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12" />
+
+            <eightbitlab.com.blurview.BlurView
+                android:id="@+id/card_hero_pairing"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="22dp"
+                android:background="@drawable/bg_ios_glass_card"
+                app:blurOverlayColor="@color/glass_overlay_color">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:id="@+id/tv_pairing_card_instructions"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="To pair another phone or tablet, generate a 6-digit sync code and enter it on the target device."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:lineSpacingExtra="3dp" />
+
+                    <!-- 6-digit code container with specular inner glass -->
+                    <LinearLayout
+                        android:id="@+id/layout_pairing_code_box"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/bg_ios_glass_card"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:id="@+id/tv_pairing_code_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PAIRING CODE"
+                            android:textColor="@color/primary_accent"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.14" />
+
+                        <TextView
+                            android:id="@+id/tv_pairing_code_digits"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="849 201"
+                            android:textColor="@color/text_primary"
+                            android:textSize="34sp"
+                            android:textStyle="bold"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.18" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btn_generate_pairing_code"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_ios_glass_button_primary"
+                        android:text="Generate Pairing Code"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textAllCaps="false" />
+                </LinearLayout>
+            </eightbitlab.com.blurview.BlurView>
+
+            <!-- 2. Default Block Configurations: Clean floating-label inputs on frosted glass -->
+            <TextView
+                android:id="@+id/tv_block_config_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="DEFAULT BLOCK CONFIGURATION"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12" />
+
+            <eightbitlab.com.blurview.BlurView
+                android:id="@+id/card_block_config"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="22dp"
+                android:background="@drawable/bg_ios_glass_card"
+                app:blurOverlayColor="@color/glass_overlay_color">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <!-- Display Name Field -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/til_display_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
+                        app:boxBackgroundMode="filled"
+                        app:boxBackgroundColor="@color/glass_input_bg"
+                        app:boxStrokeColor="@color/primary_accent"
+                        app:hintTextColor="@color/primary_accent"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusTopStart="12dp"
+                        android:hint="Console Display Name">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/et_display_name"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:text="DODONG (Admin)" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Block Message Field -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/til_block_message"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
+                        app:boxBackgroundMode="filled"
+                        app:boxBackgroundColor="@color/glass_input_bg"
+                        app:boxStrokeColor="@color/primary_accent"
+                        app:hintTextColor="@color/primary_accent"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusTopStart="12dp"
+                        android:hint="Default Block Message">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/et_block_message"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:text="This device is temporarily locked by administrator." />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Passcode Field -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/til_passcode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:boxBackgroundMode="filled"
+                        app:boxBackgroundColor="@color/glass_input_bg"
+                        app:boxStrokeColor="@color/primary_accent"
+                        app:hintTextColor="@color/primary_accent"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:passwordToggleEnabled="true"
+                        app:passwordToggleTint="@color/text_secondary"
+                        android:hint="Default Unlock Passcode">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/et_passcode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberPassword"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:text="1234" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+            </eightbitlab.com.blurview.BlurView>
+
+            <!-- 3. Advanced Network Diagnostics: Expandable Frosted Glass Accordion -->
+            <eightbitlab.com.blurview.BlurView
+                android:id="@+id/card_network_diagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="26dp"
+                android:background="@drawable/bg_ios_glass_card"
+                app:blurOverlayColor="@color/glass_overlay_color">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <!-- Accordion Header -->
+                    <RelativeLayout
+                        android:id="@+id/layout_accordion_header"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground">
+
+                        <TextView
+                            android:id="@+id/tv_accordion_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:text="Advanced Network Diagnostics"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/iv_accordion_arrow"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:src="@android:drawable/arrow_down_float"
+                            app:tint="@color/text_secondary"
+                            android:contentDescription="Expand Diagnostics" />
+                    </RelativeLayout>
+
+                    <!-- Accordion Expandable Content -->
+                    <LinearLayout
+                        android:id="@+id/layout_accordion_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginBottom="12dp"
+                            android:background="#20FFFFFF" />
+
+                        <!-- IP Address -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Local IP Address"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tv_diag_local_ip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:text="192.168.1.100"
+                                android:textColor="@color/success_telemetry"
+                                android:textSize="12sp"
+                                android:fontFamily="monospace" />
+                        </RelativeLayout>
+
+                        <!-- Socket Port -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="WebSocket Port"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tv_diag_socket_port"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:text="9999"
+                                android:textColor="@color/success_telemetry"
+                                android:textSize="12sp"
+                                android:fontFamily="monospace" />
+                        </RelativeLayout>
+
+                        <!-- Scanning Scope / Thread Pool -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Thread Pool Capacity"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tv_diag_thread_pool"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:text="50 Workers"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:fontFamily="monospace" />
+                        </RelativeLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </eightbitlab.com.blurview.BlurView>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

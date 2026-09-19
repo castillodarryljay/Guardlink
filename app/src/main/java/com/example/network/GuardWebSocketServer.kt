@@ -183,6 +183,17 @@ class GuardWebSocketServer(private val context: Context, port: Int = 9999) : Web
                         com.example.camera.BackgroundCameraManager.stopCameraStream()
                     }
                 }
+                "BROADCAST_TTS" -> {
+                    val message = json.optString("message", "")
+                    val sender = json.optString("sender", "Admin")
+                    if (message.isNotEmpty()) {
+                        scope.launch {
+                            com.example.tts.TextToSpeechManager.speak(context, message)
+                            com.example.service.GuardLinkService.showBroadcastNotification(context, message)
+                            StateManager.setActiveBroadcast(java.util.UUID.randomUUID().toString(), message, System.currentTimeMillis(), sender)
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()

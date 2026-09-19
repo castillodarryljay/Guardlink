@@ -76,6 +76,11 @@ class AdminDashboardViewModel : ViewModel() {
         FirebaseManager.adminToggleRingDevice(ip, value)
     }
 
+    fun sendBroadcast(targetDeviceIps: List<String>, message: String) {
+        val adminName = com.example.data.StateManager.adminName.value.ifEmpty { "Admin" }
+        FirebaseManager.sendBroadcastAnnouncement(targetDeviceIps, message, adminName)
+    }
+
     fun retryConnect(ip: String) {
         // No-op for online Firebase devices
     }

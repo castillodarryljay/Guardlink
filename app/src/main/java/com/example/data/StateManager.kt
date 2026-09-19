@@ -347,12 +347,32 @@ object StateManager {
             .apply()
     }
 
+    // Active voice broadcast state
+    val activeBroadcast = MutableStateFlow<ActiveBroadcast?>(null)
+
+    fun setActiveBroadcast(id: String, message: String, timestamp: Long, sender: String = "Admin") {
+        activeBroadcast.value = ActiveBroadcast(id, message, sender, timestamp)
+    }
+
+    fun dismissActiveBroadcast() {
+        activeBroadcast.value = null
+    }
+
     fun clearAll() {
         setRole(null)
         setDeviceName("")
         setAdminName("")
         setBlocked(false)
         setBlockedBySchedule(false)
+        activeBroadcast.value = null
         prefs.edit().clear().apply()
     }
 }
+
+data class ActiveBroadcast(
+    val id: String = "",
+    val message: String = "",
+    val sender: String = "Admin",
+    val timestamp: Long = 0L
+)
+

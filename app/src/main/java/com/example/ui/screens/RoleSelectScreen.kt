@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -60,7 +61,7 @@ fun RoleSelectScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg)
+            .background(Color.Transparent)
             .navigationBarsPadding()
             .statusBarsPadding(),
         contentAlignment = Alignment.TopCenter
@@ -131,7 +132,7 @@ fun RoleSelectScreen(
                     title = "ADMINISTRATOR",
                     subtitle = "Control and monitor other devices on your local network.",
                     icon = Icons.Default.Shield,
-                    borderColor = AccentBlue,
+                    borderBrush = GlassAccentBorderBrush,
                     iconColor = AccentBlue,
                     onClick = {
                         selectedRoleOption = "admin"
@@ -144,7 +145,7 @@ fun RoleSelectScreen(
                     title = "USER DEVICE",
                     subtitle = "Install and run GuardLink on this device to be locked or monitored.",
                     icon = Icons.Default.Lock,
-                    borderColor = Border,
+                    borderBrush = GlassBorderBrush,
                     iconColor = TextSecondary,
                     onClick = {
                         selectedRoleOption = "user"
@@ -253,28 +254,31 @@ fun RoleSelectionCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
-    borderColor: Color,
+    borderBrush: Brush,
     iconColor: Color,
     onClick: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Surface),
+    LiquidGlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .clickable { onClick() },
+        cornerRadius = 18.dp,
+        borderBrush = borderBrush,
+        borderWidth = 1.2.dp,
+        backgroundColor = Surface,
+        showGlare = true
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(52.dp)
-                    .background(SurfaceAlt, RoundedCornerShape(8.dp))
-                    .border(1.dp, Border, RoundedCornerShape(8.dp))
+                    .background(SurfaceAlt, RoundedCornerShape(12.dp))
+                    .background(LiquidGlassGlareGradient)
+                    .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(12.dp))
             ) {
                 Icon(
                     imageVector = icon,

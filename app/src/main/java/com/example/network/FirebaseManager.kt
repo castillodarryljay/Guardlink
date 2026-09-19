@@ -63,6 +63,7 @@ object FirebaseManager {
     private var userScope: CoroutineScope? = null
     private var adminScope: CoroutineScope? = null
     private var activeLocationListener: android.location.LocationListener? = null
+    private var lastHandledBroadcastId: String? = null
 
     // SharedPreferences keys for Firebase Pairing
     private const val PREFS_FIREBASE = "guardlink_firebase_prefs"
@@ -495,6 +496,34 @@ object FirebaseManager {
                     AudioStreamManager.playAudioSegment(intercomAudio)
                 } else if (!adminSpeaking) {
                     AudioStreamManager.stopPlayback()
+                }
+
+                // Voice Broadcast Text-to-Speech (TTS) announcement checker
+                val broadcastSnapshot = snapshot.child("activeBroadcast")
+                if (broadcastSnapshot.exists()) {
+                    val bId = broadcastSnapshot.child("id").getValue(String::class.java) ?: ""
+                    val bMsg = broadcastSnapshot.child("message").getValue(String::class.java) ?: ""
+                    val bSender = broadcastSnapshot.child("sender").getValue(String::class.java) ?: "Admin"
+                    val bTime = broadcastSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val speakAloud = broadcastSnapshot.child("speakAloud").getValue(Boolean::class.java) ?: true
+
+                    val now = System.currentTimeMillis()
+                    // If announcement is novel and within 5 minutes window
+                    if (bId.isNotEmpty() && bId != lastHandledBroadcastId && (now - bTime < 300000L || bTime > now - 300000L)) {
+                        lastHandledBroadcastId = bId
+                        Log.i(TAG, "New voice broadcast received: '$bMsg' from $bSender")
+
+                        // 1. Speak message aloud using Android TextToSpeech
+                        if (speakAloud && bMsg.isNotBlank()) {
+                            com.example.tts.TextToSpeechManager.speak(context, bMsg)
+                        }
+
+                        // 2. Post heads-up system notification
+                        com.example.service.GuardLinkService.showBroadcastNotification(context, bMsg)
+
+                        // 3. Update local StateManager to show on-screen banner in UI and overlay
+                        com.example.data.StateManager.setActiveBroadcast(bId, bMsg, bTime, bSender)
+                    }
                 }
             }
  
@@ -1031,6 +1060,30 @@ object FirebaseManager {
             "timestamp" to ServerValue.TIMESTAMP
         )
         chatRef.setValue(chatData)
+    }
+
+    fun sendBroadcastAnnouncement(targetDeviceIds: List<String>, messageText: String, senderName: String = "Admin") {
+        if (messageText.isBlank()) return
+        val broadcastId = java.util.UUID.randomUUID().toString()
+        for (deviceId in targetDeviceIds) {
+            val devRef = database.getReference("devices").child(deviceId)
+            
+            // 1. Set activeBroadcast node to trigger Text-To-Speech on client device
+            val broadcastData = mapOf(
+                "id" to broadcastId,
+                "message" to messageText,
+                "sender" to senderName,
+                "timestamp" to ServerValue.TIMESTAMP,
+                "speakAloud" to true
+            )
+            devRef.child("activeBroadcast").setValue(broadcastData)
+
+            // 2. Add to chat history
+            sendChatMessage(deviceId, "admin", "[BROADCAST] $messageText")
+
+            // 3. Record in audit logs
+            writeDeviceLog(deviceId, "BROADCAST", "Voice broadcast dispatched: \"$messageText\"")
+        }
     }
 
     fun adminConfigureGeofence(deviceId: String, enabled: Boolean, baseLat: Double, baseLng: Double, radiusMeters: Double) {

@@ -27,14 +27,60 @@ class GuardLinkService : Service() {
     companion object {
         const val CHANNEL_ID = "guardlink_service_channel"
         const val ALARM_CHANNEL_ID = "guardlink_alarm_channel"
+        const val BROADCAST_CHANNEL_ID = "guardlink_broadcast_channel"
         const val NOTIFICATION_ID = 1001
         const val ALARM_NOTIFICATION_ID = 1002
+        const val BROADCAST_NOTIFICATION_ID = 1003
         
         val isServiceRunning = MutableStateFlow(false)
         private var instance: GuardLinkService? = null
         private var audioPlayer: android.media.MediaPlayer? = null
         private var autoStopRunnable: java.lang.Runnable? = null
         private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+        fun showBroadcastNotification(context: Context, message: String) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    val channel = NotificationChannel(
+                        BROADCAST_CHANNEL_ID,
+                        "GuardLink Voice Broadcasts",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Displays priority voice announcements from administrator."
+                        enableVibration(true)
+                        setBypassDnd(true)
+                    }
+                    manager.createNotificationChannel(channel)
+                }
+
+                val openIntent = Intent(context, com.example.MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = android.app.PendingIntent.getActivity(
+                    context,
+                    3001,
+                    openIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val notification = NotificationCompat.Builder(context, BROADCAST_CHANNEL_ID)
+                    .setContentTitle("📢 Admin Broadcast Alert")
+                    .setContentText(message)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                    .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .build()
+
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(BROADCAST_NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                Log.e("GuardService", "Failed to post broadcast notification", e)
+            }
+        }
 
         fun triggerCameraStreamOn(lensFacing: String = "front") {
             instance?.let { ctx ->
@@ -353,6 +399,13 @@ class GuardLinkService : Service() {
         }
         
         createNotificationChannel()
+
+        // Eagerly initialize TextToSpeech engine so announcements play immediately without delay
+        try {
+            com.example.tts.TextToSpeechManager.init(this)
+        } catch (e: Exception) {
+            Log.e("GuardService", "Error initializing TextToSpeechManager", e)
+        }
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -538,6 +591,18 @@ class GuardLinkService : Service() {
                 setBypassDnd(true)
             }
             manager.createNotificationChannel(alarmChannel)
+
+            // priority voice broadcast announcements channel
+            val broadcastChannel = NotificationChannel(
+                BROADCAST_CHANNEL_ID,
+                "GuardLink Voice Broadcasts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Displays priority voice announcements from administrator."
+                enableVibration(true)
+                setBypassDnd(true)
+            }
+            manager.createNotificationChannel(broadcastChannel)
         }
     }
 }
