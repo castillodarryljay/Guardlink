@@ -106,110 +106,42 @@ fun LiquidGlassBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Bg)
+            .background(Color(0xFF06080F))
     ) {
-        // Living Liquid Fluid Simulation: Subtle luminous plasma nodes on pure black canvas
+        // High-precision cyber security ambient lighting:
+        // Subtle navy radial glow behind the top header with smooth falloff to obsidian black
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
 
-            // Node 1: Electric Cyan Refraction Plasma (Orbital drift in upper right)
-            val cyanX = width * (0.74f + 0.12f * cos(phase1))
-            val cyanY = height * (0.20f + 0.08f * sin(phase1))
+            // Top Header Radial Glow (Centered behind GuardLink title & Control Center)
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0x2800F2FE), // Chromatic Electric Cyan highlight
-                        Color(0x0C06B6D4),
+                        Color(0xFF11233F), // Subtle Navy Core
+                        Color(0xFF0C192E),
+                        Color(0x55081120),
                         Color.Transparent
                     ),
-                    center = Offset(cyanX, cyanY),
-                    radius = width * 0.52f * pulseScale
+                    center = Offset(width * 0.5f, height * 0.12f),
+                    radius = width * 0.75f
                 ),
-                center = Offset(cyanX, cyanY),
-                radius = width * 0.52f * pulseScale
+                center = Offset(width * 0.5f, height * 0.12f),
+                radius = width * 0.75f
             )
 
-            // Node 2: Deep Sapphire Core (Pulsing in upper-left quadrant)
-            val sapphireX = width * (0.22f + 0.08f * sin(phase2))
-            val sapphireY = height * (0.15f + 0.06f * cos(phase2))
+            // Very subtle ambient depth in lower area
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0x303B82F6), // Electric Sapphire Blue
-                        Color(0x101D4ED8),
+                        Color(0x180E1A2E),
                         Color.Transparent
                     ),
-                    center = Offset(sapphireX, sapphireY),
-                    radius = width * 0.55f * pulseScale
+                    center = Offset(width * 0.5f, height * 0.85f),
+                    radius = width * 0.65f
                 ),
-                center = Offset(sapphireX, sapphireY),
-                radius = width * 0.55f * pulseScale
-            )
-
-            // Node 3: Ultraviolet & Violet Prismatic Swirl (Lower quadrant flow)
-            val violetX = width * (0.18f + 0.10f * cos(phase2 * 0.8f))
-            val violetY = height * (0.78f + 0.09f * sin(phase2 * 0.8f))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x22A855F7), // Ultraviolet Violet
-                        Color(0x0A7C3AED),
-                        Color.Transparent
-                    ),
-                    center = Offset(violetX, violetY),
-                    radius = width * 0.54f * pulseScale
-                ),
-                center = Offset(violetX, violetY),
-                radius = width * 0.54f * pulseScale
-            )
-
-            // Node 4: Radiant Ocean Teal Caustic (Mid-left refraction)
-            val tealX = width * (0.86f + 0.08f * sin(phase1 * 0.9f))
-            val tealY = height * (0.80f + 0.08f * cos(phase1 * 0.9f))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x1C14B8A6), // Emerald Teal
-                        Color(0x080D9488),
-                        Color.Transparent
-                    ),
-                    center = Offset(tealX, tealY),
-                    radius = width * 0.48f * pulseScale
-                ),
-                center = Offset(tealX, tealY),
-                radius = width * 0.48f * pulseScale
-            )
-
-            // Node 5: Chromatic Solar Amber/Magenta Caustic Flare (Center ambient warmth)
-            val amberX = width * (0.50f + 0.05f * cos(phase1 * 1.2f))
-            val amberY = height * (0.45f + 0.06f * sin(phase2 * 1.1f))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x12F59E0B), // Warm Amber Refraction
-                        Color(0x0AEC4899), // Soft Magenta Dispersion
-                        Color.Transparent
-                    ),
-                    center = Offset(amberX, amberY),
-                    radius = width * 0.42f * causticShimmer
-                ),
-                center = Offset(amberX, amberY),
-                radius = width * 0.42f * causticShimmer
-            )
-
-            // Optical Glass Caustic Ripples (Physics-based light interference rings on true black)
-            drawCircle(
-                color = Color(0x1000F2FE),
-                center = Offset(cyanX, cyanY),
-                radius = width * 0.38f * causticShimmer,
-                style = Stroke(width = 1f)
-            )
-            drawCircle(
-                color = Color(0x0CA855F7),
-                center = Offset(violetX, violetY),
-                radius = width * 0.44f * pulseScale,
-                style = Stroke(width = 1f)
+                center = Offset(width * 0.5f, height * 0.85f),
+                radius = width * 0.65f
             )
         }
 

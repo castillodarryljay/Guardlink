@@ -41,3 +41,11 @@ data class AdminLog(
     val details: String = "",
     val timestamp: Long = 0L
 )
+
+data class ReconBroadcast(
+    val id: String = "",
+    val sender: String = "Admin",
+    val message: String = "",
+    val timestamp: Long = 0L,
+    val status: String = "TRANSMITTED" // "TRANSMITTED" | "ACKNOWLEDGED"
+)

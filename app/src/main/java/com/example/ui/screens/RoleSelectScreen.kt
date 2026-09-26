@@ -10,8 +10,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Shield
@@ -78,21 +80,17 @@ fun RoleSelectScreen(
             // Header Shield Logo
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(100.dp)
+                modifier = Modifier
+                    .size(80.dp)
+                    .background(Color(0xFF1B2332), CircleShape)
+                    .border(1.dp, Color(0xFF2B374E), CircleShape)
             ) {
-                // Background glow
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .scale(shieldScale)
-                        .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(100))
-                )
                 Icon(
                     imageVector = Icons.Default.Shield,
                     contentDescription = "Shield Logo",
-                    tint = AccentBlue,
+                    tint = Color(0xFF60A5FA),
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(42.dp)
                         .scale(shieldScale)
                 )
             }
@@ -100,17 +98,24 @@ fun RoleSelectScreen(
             // Brand Titles
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "GUARDLINK",
-                    color = TextPrimary,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 6.sp,
-                    fontFamily = FontFamily.Monospace
+                    text = "CONTROL CENTER",
+                    color = Color(0xFF7E8B9E),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.4.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Local Network Device Control",
-                    color = TextSecondary,
+                    text = "GuardLink",
+                    color = Color.White,
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Local Network & Firebase Device Mesh",
+                    color = Color(0xFF94A3B8),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -120,7 +125,7 @@ fun RoleSelectScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(Border)
+                    .background(Color(0xFF252E40))
             )
 
             // Role selection cards
@@ -129,11 +134,13 @@ fun RoleSelectScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 RoleSelectionCard(
-                    title = "ADMINISTRATOR",
-                    subtitle = "Control and monitor other devices on your local network.",
+                    title = "ADMINISTRATOR CONSOLE",
+                    subtitle = "Remote command center: Lock devices, inspect live camera & screen, send intercom broadcasts, and monitor GPS.",
                     icon = Icons.Default.Shield,
-                    borderBrush = GlassAccentBorderBrush,
-                    iconColor = AccentBlue,
+                    borderBrush = LiquidGlassChromaticBorder,
+                    iconColor = AccentCyan,
+                    badgeText = "MASTER HUB",
+                    badgeColor = AccentCyan,
                     onClick = {
                         selectedRoleOption = "admin"
                         inputName = "Admin Console"
@@ -142,11 +149,13 @@ fun RoleSelectScreen(
                 )
 
                 RoleSelectionCard(
-                    title = "USER DEVICE",
-                    subtitle = "Install and run GuardLink on this device to be locked or monitored.",
+                    title = "MANAGED USER DEVICE",
+                    subtitle = "Companion receiver: Connect via pairing code or QR to receive lockdown security policies and two-way intercom.",
                     icon = Icons.Default.Lock,
-                    borderBrush = GlassBorderBrush,
-                    iconColor = TextSecondary,
+                    borderBrush = GlassGreenBorderBrush,
+                    iconColor = AccentGreen,
+                    badgeText = "PROTECTED NODE",
+                    badgeColor = AccentGreen,
                     onClick = {
                         selectedRoleOption = "user"
                         inputName = Build.MODEL ?: "User Phone"
@@ -155,23 +164,32 @@ fun RoleSelectScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Local IP Address display
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Local IP Address:",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    text = localIp,
-                    color = TextMono,
-                    fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
+            // Local IP Address display pill
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF131722), RoundedCornerShape(100.dp))
+                    .border(1.dp, Color(0xFF202737), RoundedCornerShape(100.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(Color(0xFF22C55E), CircleShape)
+                    )
+                    Text(
+                        text = "LOCAL IP: $localIp",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
@@ -189,34 +207,50 @@ fun RoleSelectScreen(
                 containerColor = Surface,
                 title = {
                     Text(
-                        text = if (selectedRoleOption == "admin") "ENTER ADMIN NAME" else "ENTER DEVICE NAME",
-                        fontSize = 18.sp,
+                        text = if (selectedRoleOption == "admin") "SETUP ADMINISTRATOR CONSOLE" else "SETUP USER DEVICE",
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        color = TextPrimary
+                        letterSpacing = 0.5.sp,
+                        color = Color.White
                     )
                 },
                 text = {
-                    OutlinedTextField(
-                        value = inputName,
-                        onValueChange = { inputName = it },
-                        singleLine = true,
-                        label = { Text("Display Name", color = TextSecondary) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceAlt,
-                            unfocusedContainerColor = SurfaceAlt,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = AccentBlue,
-                            unfocusedBorderColor = Border
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = if (selectedRoleOption == "admin") 
+                                "Enter a descriptive name for this admin console to identify yourself during live intercom and broadcasts."
+                                else "Enter a device name for this phone (e.g. Living Room Tablet, Office Phone).",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = inputName,
+                            onValueChange = { inputName = it },
+                            singleLine = true,
+                            label = { Text("Display Name", color = TextSecondary) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = SurfaceAlt,
+                                unfocusedContainerColor = SurfaceAlt,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = AccentCyan,
+                                unfocusedBorderColor = Border
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 },
                 confirmButton = {
                     Button(
                         colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(100.dp),
+                        modifier = Modifier
+                            .height(44.dp)
+                            .border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp)),
                         onClick = {
                             if (inputName.isNotBlank() && selectedRoleOption != null) {
                                 val role = selectedRoleOption!!
@@ -235,15 +269,18 @@ fun RoleSelectScreen(
                             }
                         }
                     ) {
-                        Text("CONFIRM", color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("LAUNCH CONSOLE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDialog = false }) {
-                        Text("CANCEL", color = TextSecondary)
+                        Text("CANCEL", color = TextSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 },
-                modifier = Modifier.border(1.dp, Border, RoundedCornerShape(28.dp))
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .widthIn(max = 440.dp)
+                    .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(24.dp))
             )
         }
     }
@@ -256,29 +293,30 @@ fun RoleSelectionCard(
     icon: ImageVector,
     borderBrush: Brush,
     iconColor: Color,
+    badgeText: String,
+    badgeColor: Color,
     onClick: () -> Unit
 ) {
-    LiquidGlassCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        cornerRadius = 18.dp,
-        borderBrush = borderBrush,
-        borderWidth = 1.2.dp,
-        backgroundColor = Surface,
-        showGlare = true
+            .clickable { onClick() }
+            .border(1.dp, borderBrush, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface)
     ) {
         Row(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(52.dp)
-                    .background(SurfaceAlt, RoundedCornerShape(12.dp))
-                    .background(LiquidGlassGlareGradient)
-                    .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(12.dp))
+                    .size(54.dp)
+                    .background(SurfaceAlt, CircleShape)
+                    .border(1.dp, borderBrush, CircleShape)
             ) {
                 Icon(
                     imageVector = icon,
@@ -291,15 +329,38 @@ fun RoleSelectionCard(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    color = TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(badgeColor.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                            .border(1.dp, badgeColor.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = badgeColor,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = subtitle,
                     color = TextSecondary,
@@ -307,6 +368,15 @@ fun RoleSelectionCard(
                     lineHeight = 16.sp
                 )
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = iconColor.copy(alpha = 0.6f),
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }

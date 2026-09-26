@@ -165,6 +165,14 @@ class AdminDashboardViewModel : ViewModel() {
         FirebaseManager.sendChatMessage(deviceId, "admin", messageText)
     }
 
+    fun sendBroadcast(targetDeviceIds: List<String>, messageText: String, senderName: String = "Admin") {
+        FirebaseManager.sendBroadcastAnnouncement(targetDeviceIds, messageText, senderName)
+    }
+
+    fun clearReconBroadcasts(deviceId: String) {
+        FirebaseManager.clearReconBroadcasts(deviceId)
+    }
+
     fun clearLogs(deviceId: String) {
         FirebaseManager.adminClearLogs(deviceId)
     }

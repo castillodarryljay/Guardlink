@@ -2,7 +2,7 @@ package com.example.ui.admin
 
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,10 +12,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +42,11 @@ import com.example.ui.theme.*
 
 @Composable
 fun AdminSettingsScreen(
-    onNavigateToDashboard: () -> Unit
+    pulseScale: Float = 1f,
+    pulseAlpha: Float = 0.5f,
+    isConnected: Boolean = false,
+    adminLabel: State<String>? = null,
+    onNavigateToDashboard: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val localIp = remember<String> { NetworkScanner.getLocalIpAddress(context) }
@@ -55,77 +62,118 @@ fun AdminSettingsScreen(
         label = "diag_chevron"
     )
 
-    Scaffold(
-        bottomBar = {
-            AdminBottomBar(
-                currentScreen = "settings",
-                onNavigateToDashboard = onNavigateToDashboard,
-                onNavigateToSettings = {}
-            )
-        },
-        containerColor = Color.Transparent
-    ) { innerPadding ->
-        Box(
+    val resolvedAdminLabel = adminLabel ?: remember {
+        derivedStateOf {
+            StateManager.adminName.value.ifEmpty {
+                StateManager.deviceName.value.ifEmpty { "This Phone" }
+            }
+        }
+    }
+
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    Column(
+        modifier = Modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = if (isLandscape) 4.dp else 8.dp)
+    ) {
+        // Space-Maximized Compact Top Header (Identical alignment to Home and List)
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.TopCenter
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = if (isLandscape) 2.dp else 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
+            // Relocated Compact Pill combining Sync Status & Phone Name
+            Box(
                 modifier = Modifier
-                    .widthIn(max = 600.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                    .background(Color(0xFF141B26), RoundedCornerShape(100.dp))
+                    .border(1.dp, Color(0xFF263347), RoundedCornerShape(100.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
             ) {
-                // Screen Title Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(Surface, RoundedCornerShape(8.dp))
-                            .border(1.dp, Border, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings Icon",
-                            tint = AccentBlue,
-                            modifier = Modifier.size(20.dp)
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isConnected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .graphicsLayer {
+                                        scaleX = pulseScale
+                                        scaleY = pulseScale
+                                        alpha = pulseAlpha
+                                    }
+                                    .background(Color(0xFF22C55E), CircleShape)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .background(if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B), CircleShape)
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "GUARDLINK SETTINGS",
-                        color = TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        text = if (isConnected) "Synced" else "Connecting",
+                        color = if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(3.dp)
+                            .background(Color(0xFF4A5568), CircleShape)
+                    )
+                    Text(
+                        text = resolvedAdminLabel.value,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
+            }
 
-                // 1. HERO PAIRING CARD: Prominent 6-digit code generator with clear instructions
+            Text(
+                text = "GuardLink Settings",
+                color = Color.White,
+                fontSize = if (isLandscape) 20.sp else 24.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 10.dp))
+
+        // Scrollable settings content filling remaining vertical space
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. HERO PAIRING CARD: Prominent 6-digit code generator with clear instructions
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "DEVICE PAIRING & SYNC",
-                        color = TextSecondary,
+                        color = Color(0xFF7E8B9E),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(LiquidGlassGlareGradient)
-                            .border(1.2.dp, LiquidGlassChromaticBorder, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp)
+                            .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(18.dp)),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(18.dp),
@@ -134,7 +182,7 @@ fun AdminSettingsScreen(
                         ) {
                             Text(
                                 text = "To pair another phone or tablet, generate a 6-digit sync code and enter it on the other device's control screen.",
-                                color = TextSecondary,
+                                color = Color(0xFF94A3B8),
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.Center,
                                 lineHeight = 18.sp
@@ -144,13 +192,11 @@ fun AdminSettingsScreen(
 
                             if (pCode != null) {
                                 Card(
-                                    colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131722)),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(LiquidGlassGlareGradient)
-                                        .border(1.2.dp, GlassAccentBorderBrush, RoundedCornerShape(12.dp)),
-                                    shape = RoundedCornerShape(12.dp)
+                                        .border(1.dp, Color(0xFF252E40), RoundedCornerShape(14.dp)),
+                                    shape = RoundedCornerShape(14.dp)
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(16.dp),
@@ -159,7 +205,7 @@ fun AdminSettingsScreen(
                                     ) {
                                         Text(
                                             text = "PAIRING CODE",
-                                            color = AccentBlue,
+                                            color = Color(0xFF60A5FA),
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = FontFamily.Monospace,
@@ -167,8 +213,8 @@ fun AdminSettingsScreen(
                                         )
                                         Text(
                                             text = pCode ?: "",
-                                            color = TextPrimary,
-                                            fontSize = 32.sp,
+                                            color = Color.White,
+                                            fontSize = 34.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = FontFamily.Monospace,
                                             letterSpacing = 4.sp
@@ -177,14 +223,21 @@ fun AdminSettingsScreen(
                                         Spacer(modifier = Modifier.height(4.dp))
 
                                         // QR Code representation
-                                        com.example.ui.user.QrCodeView(
-                                            data = "guardlink_pair:$pCode",
-                                            modifier = Modifier.size(140.dp)
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFF0F131C), RoundedCornerShape(12.dp))
+                                                .border(1.dp, Color(0xFF252E40), RoundedCornerShape(12.dp))
+                                                .padding(8.dp)
+                                        ) {
+                                            com.example.ui.user.QrCodeView(
+                                                data = "guardlink_pair:$pCode",
+                                                modifier = Modifier.size(140.dp)
+                                            )
+                                        }
 
                                         Text(
                                             text = "Waiting for peer device handshake...",
-                                            color = TextSecondary,
+                                            color = Color(0xFF64748B),
                                             fontSize = 11.sp,
                                             modifier = Modifier.padding(top = 4.dp)
                                         )
@@ -194,20 +247,16 @@ fun AdminSettingsScreen(
 
                             Button(
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (pCode != null) AccentRed else Color.Transparent
+                                    containerColor = if (pCode != null) Color(0xFF3B161B) else Color(0xFF1E3A5F)
                                 ),
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(100.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp)
-                                    .then(
-                                        if (pCode == null) {
-                                            Modifier
-                                                .background(GlassButtonGradient, RoundedCornerShape(8.dp))
-                                                .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(8.dp))
-                                        } else {
-                                            Modifier.border(1.dp, GlassRedBorderBrush, RoundedCornerShape(8.dp))
-                                        }
+                                    .height(46.dp)
+                                    .border(
+                                        1.dp,
+                                        if (pCode != null) Color(0xFF7F1D1D) else Color(0xFF2E5B8F),
+                                        RoundedCornerShape(100.dp)
                                     ),
                                 onClick = {
                                     if (pCode != null) {
@@ -221,14 +270,14 @@ fun AdminSettingsScreen(
                                 Icon(
                                     imageVector = if (pCode != null) Icons.Default.Cancel else Icons.Default.QrCodeScanner,
                                     contentDescription = null,
-                                    tint = TextPrimary,
+                                    tint = if (pCode != null) Color(0xFFF87171) else Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = if (pCode != null) "Cancel Pairing Code" else "Generate 6-Digit Code",
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
+                                    color = if (pCode != null) Color(0xFFF87171) else Color.White,
                                     fontSize = 13.sp
                                 )
                             }
@@ -236,24 +285,22 @@ fun AdminSettingsScreen(
                     }
                 }
 
-                // 2. DEFAULT BLOCK CONFIGURATION: Cleanly padded Material input fields
+                // 2. DEFAULT BLOCK CONFIGURATION
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "DEFAULT BLOCK CONFIGURATION",
-                        color = TextSecondary,
+                        color = Color(0xFF7E8B9E),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(LiquidGlassGlareGradient)
-                            .border(1.2.dp, LiquidGlassChromaticBorder, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp)
+                            .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(18.dp)),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -266,15 +313,15 @@ fun AdminSettingsScreen(
                                     adminName = it
                                     StateManager.setDeviceName(it)
                                 },
-                                label = { Text("Display Name / Console Name", color = TextSecondary) },
-                                shape = RoundedCornerShape(8.dp),
+                                label = { Text("Display Name / Console Name", color = Color(0xFF8896AB)) },
+                                shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceAlt,
-                                    unfocusedContainerColor = SurfaceAlt,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                    focusedBorderColor = AccentBlue,
-                                    unfocusedBorderColor = Border
+                                    focusedContainerColor = Color(0xFF131722),
+                                    unfocusedContainerColor = Color(0xFF131722),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF3B82F6),
+                                    unfocusedBorderColor = Color(0xFF2B364A)
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -286,15 +333,15 @@ fun AdminSettingsScreen(
                                     defaultMsg = it
                                     StateManager.setDefaultMessage(it)
                                 },
-                                label = { Text("Default Block Message", color = TextSecondary) },
-                                shape = RoundedCornerShape(8.dp),
+                                label = { Text("Default Block Message", color = Color(0xFF8896AB)) },
+                                shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceAlt,
-                                    unfocusedContainerColor = SurfaceAlt,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                    focusedBorderColor = AccentBlue,
-                                    unfocusedBorderColor = Border
+                                    focusedContainerColor = Color(0xFF131722),
+                                    unfocusedContainerColor = Color(0xFF131722),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF3B82F6),
+                                    unfocusedBorderColor = Color(0xFF2B364A)
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -306,9 +353,9 @@ fun AdminSettingsScreen(
                                     defaultPass = it
                                     StateManager.setDefaultPassword(it)
                                 },
-                                label = { Text("Default Unlock Passcode", color = TextSecondary) },
+                                label = { Text("Default Unlock Passcode", color = Color(0xFF8896AB)) },
                                 singleLine = true,
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                 trailingIcon = {
@@ -316,17 +363,17 @@ fun AdminSettingsScreen(
                                         Icon(
                                             imageVector = if (showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                             contentDescription = "Toggle Visibility",
-                                            tint = TextSecondary
+                                            tint = Color(0xFF8896AB)
                                         )
                                     }
                                 },
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceAlt,
-                                    unfocusedContainerColor = SurfaceAlt,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                    focusedBorderColor = AccentBlue,
-                                    unfocusedBorderColor = Border
+                                    focusedContainerColor = Color(0xFF131722),
+                                    unfocusedContainerColor = Color(0xFF131722),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF3B82F6),
+                                    unfocusedBorderColor = Color(0xFF2B364A)
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -338,20 +385,18 @@ fun AdminSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "SYSTEM & DIAGNOSTICS",
-                        color = TextSecondary,
+                        color = Color(0xFF7E8B9E),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(LiquidGlassGlareGradient)
-                            .border(1.2.dp, LiquidGlassChromaticBorder, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp)
+                            .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(18.dp)),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -372,12 +417,12 @@ fun AdminSettingsScreen(
                                     Icon(
                                         imageVector = Icons.Default.Lan,
                                         contentDescription = null,
-                                        tint = AccentBlue,
+                                        tint = Color(0xFF60A5FA),
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Text(
                                         text = "Advanced Network Diagnostics",
-                                        color = TextPrimary,
+                                        color = Color.White,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -385,7 +430,7 @@ fun AdminSettingsScreen(
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Expand Diagnostics",
-                                    tint = TextSecondary,
+                                    tint = Color(0xFF8896AB),
                                     modifier = Modifier
                                         .size(22.dp)
                                         .rotate(chevronRotation)
@@ -404,7 +449,7 @@ fun AdminSettingsScreen(
                                         .padding(top = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    HorizontalDivider(color = Border, thickness = 1.dp)
+                                    HorizontalDivider(color = Color(0xFF252E40), thickness = 1.dp)
                                     NetworkInfoRow(label = "Local IP Address", value = localIp, isMonoText = true)
                                     NetworkInfoRow(label = "WebSocket Port", value = "9999", isMonoText = true)
                                     NetworkInfoRow(label = "Thread Pool Capacity", value = "50 Parallel Workers", isMonoText = true)
@@ -416,13 +461,11 @@ fun AdminSettingsScreen(
 
                 // Bidirectional Peer Mesh Card
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(LiquidGlassGlareGradient)
-                        .border(1.2.dp, GlassAccentBorderBrush, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp)
+                        .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(18.dp)),
+                    shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -430,16 +473,16 @@ fun AdminSettingsScreen(
                     ) {
                         Text(
                             text = "BIDIRECTIONAL PEER MESH",
-                            color = AccentBlue,
+                            color = Color(0xFF60A5FA),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )
                         Text(
                             text = "All devices connected to this account have equal peer capabilities. Any device can view live screens, view cameras, dispatch intercom audio, and manage lockdown schedules with connected peer devices.",
-                            color = TextSecondary,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.5.sp,
+                            lineHeight = 18.sp
                         )
                     }
                 }
@@ -452,13 +495,15 @@ fun AdminSettingsScreen(
                     Text(
                         text = "GuardLink v1.2.0 — Secure Admin Mesh",
                         fontSize = 11.sp,
-                        color = TextSecondary,
+                        color = Color(0xFF64748B),
                         fontFamily = FontFamily.Monospace
                     )
                 }
+
+                // Bottom padding for floating navigation bar
+                Spacer(modifier = Modifier.height(90.dp))
             }
         }
-    }
 }
 
 @Composable

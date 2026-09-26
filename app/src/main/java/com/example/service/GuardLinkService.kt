@@ -270,6 +270,62 @@ class GuardLinkService : Service() {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             notificationManager.notify(ALARM_NOTIFICATION_ID, alarmNotification)
         }
+
+        @JvmStatic
+        fun scheduleKeepAliveAlarm(context: Context) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                val intent = Intent(context.applicationContext, com.example.receiver.GuardLinkReceiver::class.java).apply {
+                    action = "com.example.action.KEEP_ALIVE_HEARTBEAT"
+                }
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context.applicationContext,
+                    1002,
+                    intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                val triggerAt = System.currentTimeMillis() + 45_000L // 45 seconds exact wakeup
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setExact(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                }
+                Log.d("GuardService", "Exact keep-alive alarm scheduled for +45s")
+            } catch (e: Exception) {
+                Log.e("GuardService", "Error setting keep-alive alarm", e)
+            }
+        }
+
+        @JvmStatic
+        fun cancelKeepAliveAlarm(context: Context) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                val intent = Intent(context.applicationContext, com.example.receiver.GuardLinkReceiver::class.java).apply {
+                    action = "com.example.action.KEEP_ALIVE_HEARTBEAT"
+                }
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context.applicationContext,
+                    1002,
+                    intent,
+                    android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                if (pendingIntent != null) {
+                    alarmManager.cancel(pendingIntent)
+                    pendingIntent.cancel()
+                    Log.d("GuardService", "Keep-alive heartbeat alarm successfully unregistered.")
+                }
+            } catch (e: Exception) {
+                Log.e("GuardService", "Error cancelling keep-alive alarm", e)
+            }
+        }
     }
     
     private var isForegroundActive = false
@@ -391,6 +447,7 @@ class GuardLinkService : Service() {
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "GuardLink:ServiceWakeLock").apply {
+                setReferenceCounted(false)
                 acquire()
             }
             Log.d("GuardService", "Partial WakeLock acquired successfully")
@@ -422,12 +479,18 @@ class GuardLinkService : Service() {
             return START_STICKY
         }
         
+        try {
+            if (wakeLock?.isHeld != true) {
+                wakeLock?.acquire()
+            }
+        } catch (_: Exception) {}
+
         updateServiceType(enableCamera = true)
         
         isServiceRunning.value = true
         
         // Schedule periodic keep-alive heartbeat alarm
-        scheduleKeepAliveAlarm()
+        scheduleKeepAliveAlarm(applicationContext)
         
         // Initialize Firebase Unified Sync
         try {
@@ -436,11 +499,12 @@ class GuardLinkService : Service() {
             e.printStackTrace()
         }
 
-        // Active background lockdown scheduler loop: checks every 10 seconds
+        // Active background lockdown scheduler loop: checks every 10 seconds and dispatches heartbeat pulse
         serviceScope.launch {
             while (isActive) {
                 try {
                     evaluateSchedules(applicationContext)
+                    com.example.network.FirebaseManager.sendBackgroundHeartbeatPulse(applicationContext)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -467,7 +531,7 @@ class GuardLinkService : Service() {
         instance = null
         
         // Cancel the keepalive alarm
-        cancelKeepAliveAlarm()
+        cancelKeepAliveAlarm(applicationContext)
         
         // Release WakeLock
         try {
@@ -517,53 +581,6 @@ class GuardLinkService : Service() {
             Log.e("GuardService", "Failed scheduling onTaskRemoved service restart", e)
         }
         super.onTaskRemoved(rootIntent)
-    }
-
-    private fun scheduleKeepAliveAlarm() {
-        try {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            val intent = Intent(applicationContext, com.example.receiver.GuardLinkReceiver::class.java).apply {
-                action = "com.example.action.KEEP_ALIVE_HEARTBEAT"
-            }
-            val pendingIntent = android.app.PendingIntent.getBroadcast(
-                applicationContext,
-                1002,
-                intent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-            )
-            val interval = 5 * 60 * 1000L // 5 minutes
-            alarmManager.setInexactRepeating(
-                android.app.AlarmManager.RTC_WAKEUP,
-                System.currentTimeMillis() + interval,
-                interval,
-                pendingIntent
-            )
-            Log.d("GuardService", "Keep-alive alarms initialized beautifully.")
-        } catch (e: Exception) {
-            Log.e("GuardService", "Error setting keep-alive alarm", e)
-        }
-    }
-
-    private fun cancelKeepAliveAlarm() {
-        try {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            val intent = Intent(applicationContext, com.example.receiver.GuardLinkReceiver::class.java).apply {
-                action = "com.example.action.KEEP_ALIVE_HEARTBEAT"
-            }
-            val pendingIntent = android.app.PendingIntent.getBroadcast(
-                applicationContext,
-                1002,
-                intent,
-                android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
-            )
-            if (pendingIntent != null) {
-                alarmManager.cancel(pendingIntent)
-                pendingIntent.cancel()
-                Log.d("GuardService", "Keep-alive heartbeat alarm successfully unregistered.")
-            }
-        } catch (e: Exception) {
-            Log.e("GuardService", "Error cancelling keep-alive alarm", e)
-        }
     }
     
     private fun createNotificationChannel() {

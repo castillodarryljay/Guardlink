@@ -200,74 +200,130 @@ object FirebaseManager {
 
     // USER SIDE FUNCTIONS
     fun generateAndPublishPairingCode(context: Context) {
-        val myDeviceId = getOrCreateDeviceId(context)
-        val myAdminId = getOrCreateAdminId(context)
         val code = (1..6).map { "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".random() }.joinToString("")
         pairingCode.value = code
 
-        val ref = database.getReference("pairing_codes").child(code)
-        val data = mapOf(
-            "code" to code,
-            "deviceId" to myDeviceId,
-            "adminId" to myAdminId,
-            "deviceName" to StateManager.deviceName.value.ifEmpty { android.os.Build.MODEL },
-            "localIp" to NetworkScanner.getLocalIpAddress(context),
-            "status" to "pending",
-            "createdAt" to ServerValue.TIMESTAMP
-        )
-        ref.setValue(data)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val myDeviceId = getOrCreateDeviceId(context)
+                val myAdminId = getOrCreateAdminId(context)
+                val localIp = NetworkScanner.getLocalIpAddress(context)
 
-        // Listen for pairing completion
-        pairingListener?.let {
-            try { ref.removeEventListener(it) } catch (e: Exception) {}
-        }
-        pairingListener = ref.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) return
-                val status = snapshot.child("status").value as? String ?: "pending"
-                if (status == "paired") {
-                    val partnerDevId = snapshot.child("adminDeviceId").getValue(String::class.java)
-                        ?: snapshot.child("partnerDeviceId").getValue(String::class.java)
-                    if (!partnerDevId.isNullOrEmpty()) {
-                        StateManager.addPairedDeviceId(partnerDevId)
-                        database.getReference("devices").child(myDeviceId)
-                            .child("pairedDevices").child(partnerDevId).setValue(true)
-                    }
-                    pairingCode.value = null
+                val ref = database.getReference("pairing_codes").child(code)
+                val data = mapOf(
+                    "code" to code,
+                    "deviceId" to myDeviceId,
+                    "adminId" to myAdminId,
+                    "deviceName" to StateManager.deviceName.value.ifEmpty { android.os.Build.MODEL },
+                    "localIp" to localIp,
+                    "status" to "pending",
+                    "createdAt" to ServerValue.TIMESTAMP
+                )
+                ref.setValue(data)
 
-                    // Cleanup code node
-                    ref.removeValue()
-                    if (pairingListener != null) {
-                        ref.removeEventListener(pairingListener!!)
+                // Listen for pairing completion
+                withContext(Dispatchers.Main) {
+                    pairingListener?.let {
+                        try { ref.removeEventListener(it) } catch (e: Exception) {}
                     }
+                    pairingListener = ref.addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (!snapshot.exists()) return
+                            val status = snapshot.child("status").value as? String ?: "pending"
+                            if (status == "paired") {
+                                val partnerDevId = snapshot.child("adminDeviceId").getValue(String::class.java)
+                                    ?: snapshot.child("partnerDeviceId").getValue(String::class.java)
+                                if (!partnerDevId.isNullOrEmpty()) {
+                                    StateManager.addPairedDeviceId(partnerDevId)
+                                    database.getReference("devices").child(myDeviceId)
+                                        .child("pairedDevices").child(partnerDevId).setValue(true)
+                                }
+                                pairingCode.value = null
+
+                                // Cleanup code node
+                                ref.removeValue()
+                                if (pairingListener != null) {
+                                    ref.removeEventListener(pairingListener!!)
+                                }
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            Log.e(TAG, "Pairing code listener cancelled", error.toException())
+                        }
+                    })
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in generateAndPublishPairingCode", e)
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Pairing code listener cancelled", error.toException())
-            }
-        })
+        }
     }
 
-    private fun getDeviceLocation(context: Context): Pair<Double, Double>? {
+    fun getDeviceLocation(context: Context): Pair<Double, Double>? {
         try {
             val lm = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
-            if (lm != null) {
-                val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                if (hasFine || hasCoarse) {
-                    val providers = lm.getProviders(true)
-                    var bestLocation: android.location.Location? = null
-                    for (provider in providers) {
-                        val l = lm.getLastKnownLocation(provider) ?: continue
-                        if (bestLocation == null || l.accuracy < bestLocation.accuracy) {
-                            bestLocation = l
-                        }
-                    }
-                    if (bestLocation != null) {
-                        return Pair(bestLocation.latitude, bestLocation.longitude)
-                    }
+                ?: return null
+
+            val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            if (!hasFine && !hasCoarse) return null
+
+            // Evaluate all candidate providers: GPS, NETWORK, PASSIVE, and fused providers
+            val candidateProviders = linkedSetOf(
+                android.location.LocationManager.GPS_PROVIDER,
+                android.location.LocationManager.NETWORK_PROVIDER,
+                android.location.LocationManager.PASSIVE_PROVIDER
+            )
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    candidateProviders.add(android.location.LocationManager.FUSED_PROVIDER)
+                } else {
+                    candidateProviders.add("fused")
                 }
+            } catch (_: Exception) {}
+            try {
+                candidateProviders.addAll(lm.getProviders(true))
+                candidateProviders.addAll(lm.allProviders)
+            } catch (_: Exception) {}
+
+            val now = System.currentTimeMillis()
+            var bestLocation: android.location.Location? = null
+            var bestScore = Double.MAX_VALUE
+
+            fun isValidCoordinates(lat: Double, lng: Double): Boolean {
+                if (lat.isNaN() || lng.isNaN() || lat.isInfinite() || lng.isInfinite()) return false
+                if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) return false
+                // Reject invalid coordinates and Null Island coordinates (0.0, 0.0)
+                if (kotlin.math.abs(lat) < 0.0001 && kotlin.math.abs(lng) < 0.0001) return false
+                return true
+            }
+
+            for (provider in candidateProviders) {
+                try {
+                    val l = lm.getLastKnownLocation(provider) ?: continue
+                    if (!isValidCoordinates(l.latitude, l.longitude)) continue
+
+                    val ageMs = (now - l.time).coerceAtLeast(0L)
+                    val accuracy = if (l.hasAccuracy() && l.accuracy > 0f) l.accuracy.toDouble() else 100.0
+                    // Select the freshest, most accurate fix
+                    val agePenalty = if (ageMs > 10 * 60 * 1000L) (ageMs / 60000.0) * 8.0 else (ageMs / 15000.0)
+                    val score = accuracy + agePenalty
+
+                    if (bestLocation == null || score < bestScore) {
+                        bestLocation = l
+                        bestScore = score
+                    }
+                } catch (_: SecurityException) {
+                } catch (_: Exception) {}
+            }
+
+            if (bestLocation != null) {
+                return Pair(bestLocation.latitude, bestLocation.longitude)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed device location direct GPS query", e)
@@ -304,7 +360,20 @@ object FirebaseManager {
                     if (hasFine || hasCoarse) {
                         val listener = object : android.location.LocationListener {
                             override fun onLocationChanged(loc: android.location.Location) {
-                                Log.i(TAG, "Active GPS/Network location update: ${loc.latitude}, ${loc.longitude}")
+                                val lat = loc.latitude
+                                val lng = loc.longitude
+                                if (!lat.isNaN() && !lng.isNaN() &&
+                                    (kotlin.math.abs(lat) > 0.0001 || kotlin.math.abs(lng) > 0.0001) &&
+                                    lat in -90.0..90.0 && lng in -180.0..180.0) {
+                                    Log.i(TAG, "Live GPS/Network fix acquired: $lat, $lng, acc: ${loc.accuracy}m")
+                                    // Live Fix Propagation: Save to local persistence and push fresh coordinates directly to Firebase
+                                    StateManager.saveLastKnownLocation(lat, lng)
+                                    ref.updateChildren(mapOf(
+                                        "latitude" to lat,
+                                        "longitude" to lng,
+                                        "lastSeen" to ServerValue.TIMESTAMP
+                                    ))
+                                }
                             }
                             override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
                             override fun onProviderEnabled(provider: String) {}
@@ -313,11 +382,14 @@ object FirebaseManager {
                         activeLocationListener = listener
                         
                         if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
-                            lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 5000L, 5f, listener)
+                            lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 3000L, 2f, listener)
                         }
                         if (lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
                             val netProvider = android.location.LocationManager.NETWORK_PROVIDER
-                            lm.requestLocationUpdates(netProvider, 5000L, 5f, listener)
+                            lm.requestLocationUpdates(netProvider, 3000L, 2f, listener)
+                        }
+                        if (lm.isProviderEnabled(android.location.LocationManager.PASSIVE_PROVIDER)) {
+                            lm.requestLocationUpdates(android.location.LocationManager.PASSIVE_PROVIDER, 3000L, 2f, listener)
                         }
                     }
                 }
@@ -328,6 +400,13 @@ object FirebaseManager {
             }
         }
         
+        try {
+            ref.child("status").onDisconnect().setValue("inactive")
+            ref.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed setting onDisconnect handler", e)
+        }
+
         // Start heartbeat scope
         userScope?.launch {
             var locationSeedLat = StateManager.lastLatitude.value
@@ -388,8 +467,10 @@ object FirebaseManager {
                     }
  
                     // Update to database
+                    val isCurrentlyBlocked = StateManager.isBlocked.value
                     val telemetryMap = mapOf(
                         "lastSeen" to ServerValue.TIMESTAMP,
+                        "status" to if (isCurrentlyBlocked) "blocked" else "active",
                         "localIp" to NetworkScanner.getLocalIpAddress(context),
                         "name" to StateManager.deviceName.value,
                         "batteryLevel" to pct,
@@ -745,6 +826,12 @@ object FirebaseManager {
     fun stopUserSyncOnly(context: Context) {
         val deviceId = getOrCreateDeviceId(context)
         
+        try {
+            database.getReference("devices").child(deviceId).child("status").setValue("inactive")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set status inactive on stopUserSyncOnly", e)
+        }
+
         userDeviceListener?.let {
             database.getReference("devices").child(deviceId).removeEventListener(it)
         }
@@ -859,6 +946,7 @@ object FirebaseManager {
                     "id" to A_devId,
                     "name" to A_devName,
                     "adminId" to B_adminId, // A is seen by B
+                    "adminDeviceId" to B_devId,
                     "localIp" to A_devIp,
                     "status" to "active",
                     "blocked" to false,
@@ -867,8 +955,7 @@ object FirebaseManager {
                     "blockedUntil" to 0L,
                     "blockedImage" to "",
                     "cameraStreamRequested" to false,
-                    "lastSeen" to ServerValue.TIMESTAMP,
-                    "pairedDevices" to mapOf(B_devId to true)
+                    "lastSeen" to ServerValue.TIMESTAMP
                 )
 
                 val devRefB = database.getReference("devices").child(B_devId)
@@ -884,14 +971,16 @@ object FirebaseManager {
                     "blockedUntil" to 0L,
                     "blockedImage" to "",
                     "cameraStreamRequested" to false,
-                    "lastSeen" to ServerValue.TIMESTAMP,
-                    "pairedDevices" to mapOf(A_devId to true)
+                    "lastSeen" to ServerValue.TIMESTAMP
                 )
 
                 devRefA.updateChildren(devDataA).addOnCompleteListener { taskA ->
                     if (taskA.isSuccessful) {
+                        devRefA.child("pairedDevices").child(B_devId).setValue(true)
+                        devRefA.child("adminDeviceId").setValue(B_devId)
                         devRefB.updateChildren(devDataB).addOnCompleteListener { taskB ->
                             if (taskB.isSuccessful) {
+                                devRefB.child("pairedDevices").child(A_devId).setValue(true)
                                 pairingRef.child("adminId").setValue(B_adminId)
                                 pairingRef.child("adminDeviceId").setValue(B_devId)
                                 pairingRef.child("adminName").setValue(B_adminNameStr)
@@ -952,15 +1041,19 @@ object FirebaseManager {
                         continue // Exclude own device from the peer devices list
                     }
 
-                    // STRICT: Only show devices explicitly paired via QR code or pairing code on this admin device!
-                    val isPairedLocally = myPairedSet.contains(devId)
-                    val isPairedInMyNode = myFirebasePaired.child(devId).getValue(Boolean::class.java) == true
+                    // STRICT: Only show devices that this admin explicitly connected using QR code or pairing code!
+                    val isLocallyPaired = myPairedSet.contains(devId)
+                    val isPairedInMyNode = currentMyDeviceId.isNotEmpty() && myFirebasePaired.child(devId).getValue(Boolean::class.java) == true
 
-                    if (!isPairedLocally && !isPairedInMyNode) {
-                        continue // Ignore unpaired devices from database
+                    if (!isLocallyPaired && !isPairedInMyNode) {
+                        // Never paired by this user on this admin phone via QR/code - strictly exclude!
+                        continue
                     }
 
-                    if (!isPairedLocally) {
+                    // Keep local and remote state in sync for this strictly paired device
+                    if (isLocallyPaired && !isPairedInMyNode && currentMyDeviceId.isNotEmpty()) {
+                        myNodeSnapshot.ref.child("pairedDevices").child(devId).setValue(true)
+                    } else if (isPairedInMyNode && !isLocallyPaired) {
                         StateManager.addPairedDeviceId(devId)
                     }
 
@@ -969,8 +1062,24 @@ object FirebaseManager {
                     val blocked = child.child("blocked").getValue(Boolean::class.java) ?: false
                     val lastSeen = child.child("lastSeen").getValue(Long::class.java) ?: 0L
 
-                    val isOnline = (System.currentTimeMillis() - lastSeen) < 60000
-                    val status = if (!isOnline) "offline" else if (blocked) "blocked" else "active"
+                    val childStatus = child.child("status").getValue(String::class.java) ?: ""
+
+                    // Device is online if heartbeat is recent (< 60s) and not marked offline/inactive
+                    val isOnline = (System.currentTimeMillis() - lastSeen) < 60000 && childStatus != "inactive" && childStatus != "offline"
+
+                    // Exclude self by name if local device name matches
+                    val myCurrentName = StateManager.deviceName.value
+                    val myAdminName = StateManager.adminName.value
+                    if (name.equals(myCurrentName, ignoreCase = true) || name.equals(myAdminName, ignoreCase = true)) {
+                        continue // Skip own admin device
+                    }
+
+                    // Keep device in list even when connection is lost; set status indicator to "inactive"
+                    val status = when {
+                        !isOnline -> "inactive"
+                        blocked -> "blocked"
+                        else -> "active"
+                    }
 
                     // Decode telemetry and styles
                     val batteryLevel = child.child("batteryLevel").getValue(Int::class.java) ?: 100
@@ -1078,12 +1187,46 @@ object FirebaseManager {
             )
             devRef.child("activeBroadcast").setValue(broadcastData)
 
-            // 2. Add to chat history
-            sendChatMessage(deviceId, "admin", "[BROADCAST] $messageText")
+            // 2. Record separately in dedicated Recon Broadcasts Terminal channel (NOT in direct chat)
+            val bCastRef = devRef.child("recon_broadcasts").push()
+            val bCastData = mapOf(
+                "id" to (bCastRef.key ?: broadcastId),
+                "broadcastId" to broadcastId,
+                "message" to messageText,
+                "sender" to senderName,
+                "timestamp" to ServerValue.TIMESTAMP,
+                "status" to "TRANSMITTED"
+            )
+            bCastRef.setValue(bCastData)
 
             // 3. Record in audit logs
-            writeDeviceLog(deviceId, "BROADCAST", "Voice broadcast dispatched: \"$messageText\"")
+            writeDeviceLog(deviceId, "RECON_BROADCAST", "Voice broadcast dispatched: \"$messageText\"")
         }
+    }
+
+    fun acknowledgeBroadcast(deviceId: String, broadcastId: String) {
+        val devRef = database.getReference("devices").child(deviceId)
+        devRef.child("recon_broadcasts").orderByChild("broadcastId").equalTo(broadcastId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    for (child in snapshot.children) {
+                        child.ref.child("status").setValue("ACKNOWLEDGED")
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    fun acknowledgeActiveBroadcast(broadcastId: String) {
+        val devId = currentMyDeviceId
+        if (devId.isNotBlank()) {
+            acknowledgeBroadcast(devId, broadcastId)
+            database.getReference("devices").child(devId).child("activeBroadcast").removeValue()
+        }
+    }
+
+    fun clearReconBroadcasts(deviceId: String) {
+        database.getReference("devices").child(deviceId).child("recon_broadcasts").removeValue()
     }
 
     fun adminConfigureGeofence(deviceId: String, enabled: Boolean, baseLat: Double, baseLng: Double, radiusMeters: Double) {
@@ -1187,6 +1330,54 @@ object FirebaseManager {
     fun adminToggleRingDevice(deviceId: String, value: Boolean) {
         database.getReference("devices").child(deviceId).child("ringRequested").setValue(value)
         writeDeviceLog(deviceId, if (value) "FIND_ALERT_START" else "FIND_ALERT_STOP", if (value) "Audible finding alert dispatched." else "Audible finding alert stopped.")
+    }
+
+    fun sendBackgroundHeartbeatPulse(context: Context) {
+        val devId = currentMyDeviceId.ifBlank { getOrCreateDeviceId(context) }
+        if (devId.isBlank()) return
+
+        try {
+            val devRef = database.getReference("devices").child(devId)
+            val freshLoc = getDeviceLocation(context)
+            val finalLat: Double
+            val finalLng: Double
+            if (freshLoc != null) {
+                finalLat = freshLoc.first
+                finalLng = freshLoc.second
+                StateManager.saveLastKnownLocation(finalLat, finalLng)
+            } else {
+                finalLat = StateManager.lastLatitude.value
+                finalLng = StateManager.lastLongitude.value
+            }
+
+            val batteryStatus: android.content.Intent? = try {
+                context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            } catch (e: Exception) { null }
+            val level = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val pct = if (level >= 0 && scale > 0) (level * 100 / scale.toFloat()).toInt() else 85
+            val statusVal = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val isCharging = statusVal == android.os.BatteryManager.BATTERY_STATUS_CHARGING || statusVal == android.os.BatteryManager.BATTERY_STATUS_FULL
+
+            val isCurrentlyBlocked = StateManager.isBlocked.value
+            val pulseMap = mutableMapOf<String, Any>(
+                "lastSeen" to ServerValue.TIMESTAMP,
+                "status" to if (isCurrentlyBlocked) "blocked" else "active",
+                "batteryLevel" to pct,
+                "isCharging" to isCharging,
+                "localIp" to NetworkScanner.getLocalIpAddress(context)
+            )
+
+            if (kotlin.math.abs(finalLat) > 0.0001 || kotlin.math.abs(finalLng) > 0.0001) {
+                pulseMap["latitude"] = finalLat
+                pulseMap["longitude"] = finalLng
+            }
+
+            devRef.updateChildren(pulseMap)
+            Log.d(TAG, "sendBackgroundHeartbeatPulse synced telemetry: lat=$finalLat, lng=$finalLng")
+        } catch (e: Exception) {
+            Log.e(TAG, "sendBackgroundHeartbeatPulse error", e)
+        }
     }
 
     fun cleanupAdmin() {

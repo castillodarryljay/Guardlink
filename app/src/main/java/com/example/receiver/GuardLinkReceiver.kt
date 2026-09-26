@@ -25,6 +25,13 @@ class GuardLinkReceiver : BroadcastReceiver() {
         Log.i("GuardReceiver", "Current saved role detected: $role")
         
         if (role == "user") {
+            // Deep-Sleep Background Sync: push fresh location & telemetry pulse to Firebase during wakeups
+            try {
+                com.example.network.FirebaseManager.sendBackgroundHeartbeatPulse(context.applicationContext)
+            } catch (e: Exception) {
+                Log.e("GuardReceiver", "Failed sending background heartbeat pulse", e)
+            }
+
             val isRunning = GuardLinkService.isServiceRunning.value
             Log.i("GuardReceiver", "User role holds service status running = $isRunning")
             if (!isRunning) {

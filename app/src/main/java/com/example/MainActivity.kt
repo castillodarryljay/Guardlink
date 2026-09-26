@@ -97,18 +97,5 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun GuardLinkApp() {
-    var currentRoute by remember { mutableStateOf("dashboard") } // "dashboard" or "settings"
-
-    if (currentRoute == "dashboard") {
-        AdminDashboardScreen(
-            onNavigateToSettings = { currentRoute = "settings" }
-        )
-    } else {
-        androidx.activity.compose.BackHandler {
-            currentRoute = "dashboard"
-        }
-        AdminSettingsScreen(
-            onNavigateToDashboard = { currentRoute = "dashboard" }
-        )
-    }
+    AdminDashboardScreen()
 }

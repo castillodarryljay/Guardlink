@@ -1,6 +1,7 @@
 package com.example.ui.admin
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import com.example.data.DiscoveredDevice
 import com.example.data.StateManager
 import com.example.network.NetworkScanner
@@ -55,6 +58,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.draw.scale
 
@@ -62,7 +70,7 @@ import androidx.compose.ui.draw.scale
 @Composable
 fun AdminDashboardScreen(
     viewModel: AdminDashboardViewModel = viewModel(),
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val devices by viewModel.devices.collectAsState(initial = emptyList())
@@ -70,6 +78,7 @@ fun AdminDashboardScreen(
     val scanProgress by viewModel.scanProgress.collectAsState()
     val scanProgressText by viewModel.scanProgressText.collectAsState()
 
+    var selectedTab by remember { mutableStateOf("home") } // "home", "list", "settings"
     var showBlockModalForDevice by remember { mutableStateOf<DiscoveredDevice?>(null) }
     var showCameraModalForDevice by remember { mutableStateOf<DiscoveredDevice?>(null) }
     var showScreenModalForDevice by remember { mutableStateOf<DiscoveredDevice?>(null) }
@@ -83,6 +92,78 @@ fun AdminDashboardScreen(
     val isConnected by com.example.network.FirebaseManager.isFirebaseConnected.collectAsState(initial = false)
     val isScreenAuthorized by com.example.camera.ScreenCaptureManager.isScreenCaptureAuthorized.collectAsState()
     val localIp = "Cloud Mode"
+
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000L)
+            currentTime = System.currentTimeMillis()
+        }
+    }
+
+    val pairedDeviceIds by StateManager.pairedDeviceIds.collectAsState()
+
+    val connectedDevices = remember(devices, pairedDeviceIds, currentTime) {
+        devices.filter { dev ->
+            val isNotSelf = dev.ip != com.example.network.FirebaseManager.currentMyDeviceId &&
+                            !dev.name.equals(StateManager.deviceName.value, ignoreCase = true) &&
+                            !dev.name.equals(StateManager.adminName.value, ignoreCase = true)
+            val isStrictlyPaired = pairedDeviceIds.contains(dev.ip)
+            isNotSelf && isStrictlyPaired
+        }.map { dev ->
+            val isLive = (currentTime - dev.lastSeen) <= 60000L && dev.status != "offline" && dev.status != "inactive"
+            if (!isLive) {
+                dev.copy(status = "inactive")
+            } else {
+                dev
+            }
+        }
+    }
+
+    val adminLabel = remember {
+        derivedStateOf {
+            val name = StateManager.adminName.value.ifEmpty {
+                StateManager.deviceName.value.ifEmpty { "This Phone" }
+            }
+            name
+        }
+    }
+
+    // High-tech pulsating beacon animation for live connectivity
+    val pulseTransition = rememberInfiniteTransition(label = "pulseTransition")
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+    val pulseScale by pulseTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    // Smooth spinning animation for refresh icon when scan is in progress
+    val scanInfiniteTransition = rememberInfiniteTransition(label = "scanInfiniteTransition")
+    val scanRotation by scanInfiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scanRotation"
+    )
 
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -106,7 +187,8 @@ fun AdminDashboardScreen(
                   showBlockModalForDevice != null ||
                   showScheduleManager ||
                   showManualDeviceManager ||
-                  showDeviceControlsForDevice != null
+                  showDeviceControlsForDevice != null ||
+                  selectedTab != "home"
     ) {
         when {
             showScreenModalForDevice != null -> showScreenModalForDevice = null
@@ -115,19 +197,11 @@ fun AdminDashboardScreen(
             showScheduleManager -> showScheduleManager = false
             showManualDeviceManager -> showManualDeviceManager = false
             showDeviceControlsForDevice != null -> showDeviceControlsForDevice = null
+            selectedTab != "home" -> selectedTab = "home"
         }
     }
 
     Scaffold(
-        bottomBar = {
-            if (showDeviceControlsForDevice == null) {
-                AdminBottomBar(
-                    currentScreen = "dashboard",
-                    onNavigateToDashboard = {},
-                    onNavigateToSettings = onNavigateToSettings
-                )
-            }
-        },
         containerColor = Color.Transparent
     ) { innerPadding ->
         Box(
@@ -145,152 +219,100 @@ fun AdminDashboardScreen(
                     onDismiss = { showDeviceControlsForDevice = null },
                     onBlockClick = { showBlockModalForDevice = freshDevice },
                     onCameraClick = { showCameraModalForDevice = freshDevice },
-                    onScreenClick = { showScreenModalForDevice = freshDevice }
+                    onScreenClick = { showScreenModalForDevice = freshDevice },
+                    onScheduleClick = { showScheduleManager = true }
                 )
             } else {
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = 600.dp)
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-            // Header: Brand Badge & Status Pill
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Surface, RoundedCornerShape(10.dp))
-                            .border(1.dp, Border, RoundedCornerShape(10.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = "Shield Logo",
-                            tint = AccentBlue,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    Column {
-                        Text(
-                            text = "CONTROL CENTER",
-                            color = TextSecondary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "GUARDLINK",
-                            color = TextPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.End
-                ) {
-                    // Status Pill (pulse dot + ONLINE / SYNCED)
-                    Box(
-                        modifier = Modifier
-                            .background(SurfaceAlt, RoundedCornerShape(100.dp))
-                            .border(1.dp, Border, RoundedCornerShape(100.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(if (isConnected) AccentGreen else AccentAmber, CircleShape)
-                            )
-                            Text(
-                                text = if (isConnected) "ONLINE / SYNCED" else "RECONNECTING",
-                                color = if (isConnected) AccentGreen else AccentAmber,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "${StateManager.deviceName.value} (Admin)",
-                        color = TextSecondary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            // Cloud Sync System Card (Slim elegant ribbon style with liquid glass)
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, if (isConnected) GlassGreenBorderBrush else GlassAmberBorderBrush, RoundedCornerShape(12.dp))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
+                AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) +
+                         scaleIn(initialScale = 0.98f, animationSpec = tween(220, easing = LinearOutSlowInEasing)))
+                            .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)))
+                    },
+                    label = "tabTransition",
+                    modifier = Modifier.fillMaxSize()
+                ) { currentTab ->
+                    when (currentTab) {
+                    "home" -> {
+                        Column(
                             modifier = Modifier
-                                .size(8.dp)
-                                .background(if (isConnected) AccentGreen else Color(0xFFFFA726), CircleShape)
-                        )
-                        Text(
-                            text = if (isConnected) "CLOUD SYNC SYSTEM ACTIVE" else "CLOUD SYNC ACTIVE (SYSTEM RETRYING)",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
+                                .widthIn(max = 640.dp)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = if (isLandscape) 4.dp else 8.dp)
+                        ) {
+                            // Space-Maximized Compact Top Header (Relocated Sync & Name Indicator)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp, bottom = if (isLandscape) 2.dp else 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                // Relocated Sync Status & Phone Name Indicator
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFF141B26), RoundedCornerShape(100.dp))
+                                        .border(1.dp, Color(0xFF263347), RoundedCornerShape(100.dp))
+                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (isConnected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(7.dp)
+                                                        .graphicsLayer {
+                                                            scaleX = pulseScale
+                                                            scaleY = pulseScale
+                                                            alpha = pulseAlpha
+                                                        }
+                                                        .background(Color(0xFF22C55E), CircleShape)
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .background(if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B), CircleShape)
+                                            )
+                                        }
+                                        Text(
+                                            text = if (isConnected) "Synced" else "Connecting",
+                                            color = if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(3.dp)
+                                                .background(Color(0xFF4A5568), CircleShape)
+                                        )
+                                        Text(
+                                            text = adminLabel.value,
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
 
-                    Box(
-                        modifier = Modifier
-                            .background(if (isConnected) AccentGreen.copy(alpha = 0.15f) else Color(0xFFFFA726).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                            .border(1.dp, if (isConnected) GlassGreenBorderBrush else GlassAmberBorderBrush, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = if (isConnected) "ONLINE" else "RECONNECTING",
-                            color = if (isConnected) AccentGreen else Color(0xFFFFA726),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-            }
+                                Text(
+                                    text = "GuardLink",
+                                    color = Color.White,
+                                    fontSize = if (isLandscape) 20.sp else 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = (-0.5).sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 10.dp))
 
-            // Progress state
+            // Progress state if scanning
             AnimatedVisibility(
                 visible = isScanning,
                 enter = expandVertically() + fadeIn(),
@@ -303,112 +325,112 @@ fun AdminDashboardScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            // Quick Actions (2x2 Uniform Grid with Liquid Glass Refraction)
+            // QUICK ACTIONS Headline
+            Text(
+                text = "QUICK ACTIONS",
+                color = Color(0xFF7E8B9E),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Quick Actions (2x2 Grid)
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Row 1: Lockdown & Pair Device
+                // Row 1: Remote Lock & Pair Device
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // 1. Lockdown
+                    // 1. Remote Lock
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF241016)),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(78.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(LiquidGlassGlareGradient)
-                            .clickable { showScheduleManager = true }
-                            .border(1.2.dp, GlassRedBorderBrush, RoundedCornerShape(14.dp))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(AccentRed.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                                    .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(8.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LockClock,
-                                    contentDescription = "Lockdown",
-                                    tint = AccentRed,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            .height(116.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                val target = connectedDevices.firstOrNull() ?: devices.firstOrNull()
+                                if (target != null) {
+                                    showBlockModalForDevice = target
+                                } else {
+                                    showScheduleManager = true
+                                }
                             }
-                            Column(modifier = Modifier.weight(1f)) {
+                            .border(1.2.dp, Color(0xFF5A1A24), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = "Remote Lock",
+                                tint = Color(0xFFF87171),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
                                 Text(
-                                    text = "LOCKDOWN",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
+                                    text = "Remote Lock",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Auto schedule",
-                                    color = TextSecondary,
-                                    fontSize = 10.sp,
+                                    text = "Instantly lock screen",
+                                    color = Color(0xFF8F98A8),
+                                    fontSize = 11.5.sp,
                                     maxLines = 1
                                 )
                             }
                         }
                     }
 
-                    // 2. Pair Device
+                    // 2. Lockdown Scheduler (replaces Pair Device)
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B26)),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(78.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(LiquidGlassGlareGradient)
-                            .clickable { showManualDeviceManager = true }
-                            .border(1.2.dp, GlassAccentBorderBrush, RoundedCornerShape(14.dp))
+                            .height(116.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { showScheduleManager = true }
+                            .border(1.2.dp, Color(0xFF252E40), RoundedCornerShape(16.dp))
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .fillMaxSize()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                                    .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(8.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Pair Device",
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "Lockdown Scheduler",
+                                tint = Color(0xFF818CF8),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
                                 Text(
-                                    text = "PAIR DEVICE",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
+                                    text = "Lock Schedule",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Register & sync",
-                                    color = TextSecondary,
-                                    fontSize = 10.sp,
+                                    text = "Automated timed locks",
+                                    color = Color(0xFF8F98A8),
+                                    fontSize = 11.5.sp,
                                     maxLines = 1
                                 )
                             }
@@ -416,20 +438,19 @@ fun AdminDashboardScreen(
                     }
                 }
 
-                // Row 2: Screen Sharing & Broadcast
+                // Row 2: Share Screen & Voice Alert
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // 3. Screen Sharing
+                    // 3. Share Screen
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B26)),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(78.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(LiquidGlassGlareGradient)
+                            .height(116.dp)
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 if (!isScreenAuthorized) {
                                     val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? android.media.projection.MediaProjectionManager
@@ -437,103 +458,94 @@ fun AdminDashboardScreen(
                                     if (intent != null) {
                                         mediaProjectionLauncher.launch(intent)
                                     }
+                                } else {
+                                    android.widget.Toast.makeText(context, "Screen sharing is active", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            .border(1.2.dp, if (isScreenAuthorized) GlassGreenBorderBrush else GlassBorderBrush, RoundedCornerShape(14.dp))
+                            .border(1.2.dp, if (isScreenAuthorized) Color(0xFF1E3A5F) else Color(0xFF252E40), RoundedCornerShape(16.dp))
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .fillMaxSize()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
                             Box(
-                                contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(34.dp)
-                                    .background(
-                                        if (isScreenAuthorized) AccentGreen.copy(alpha = 0.15f) else SurfaceAlt,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .border(1.dp, if (isScreenAuthorized) GlassGreenBorderBrush else GlassBorderBrush, RoundedCornerShape(8.dp))
+                                    .size(24.dp)
+                                    .border(1.5.dp, Color(0xFF94A3B8), RoundedCornerShape(4.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isScreenAuthorized) Icons.Default.CheckCircle else Icons.Default.ScreenShare,
-                                    contentDescription = "Screen Share",
-                                    tint = if (isScreenAuthorized) AccentGreen else AccentBlue,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Share Screen",
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column {
                                 Text(
-                                    text = "SCREEN SHARE",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
+                                    text = "Share Screen",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = if (isScreenAuthorized) "Ready • In RAM" else "Tap to authorize",
-                                    color = if (isScreenAuthorized) AccentGreen else TextSecondary,
-                                    fontSize = 10.sp,
+                                    text = if (isScreenAuthorized) "Broadcasting active" else "Broadcast screen live",
+                                    color = Color(0xFF8F98A8),
+                                    fontSize = 11.5.sp,
                                     maxLines = 1
                                 )
                             }
                         }
                     }
 
-                    // 4. Broadcast
+                    // 4. Voice Alert
                     var showBroadcastDialog by remember { mutableStateOf(false) }
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF241C10)),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(78.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(LiquidGlassGlareGradient)
+                            .height(116.dp)
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
-                                if (devices.isNotEmpty()) {
+                                val targetDevices = if (connectedDevices.isNotEmpty()) connectedDevices else devices
+                                if (targetDevices.isNotEmpty()) {
                                     showBroadcastDialog = true
                                 } else {
-                                    android.widget.Toast.makeText(context, "No connected devices to broadcast to", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "No connected devices to alert", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            .border(1.2.dp, GlassAmberBorderBrush, RoundedCornerShape(14.dp))
+                            .border(1.2.dp, Color(0xFF4D3818), RoundedCornerShape(16.dp))
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
-                                .padding(12.dp)
-                                .fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .fillMaxSize()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(SurfaceAlt, RoundedCornerShape(8.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Campaign,
-                                    contentDescription = "Broadcast",
-                                    tint = AccentAmber,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Campaign,
+                                contentDescription = "Voice Alert",
+                                tint = Color(0xFFFBBF24),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
                                 Text(
-                                    text = "BROADCAST",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
+                                    text = "Voice Alert",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Intercom voice alert",
-                                    color = TextSecondary,
-                                    fontSize = 10.sp,
+                                    text = "Speak message out loud",
+                                    color = Color(0xFF8F98A8),
+                                    fontSize = 11.5.sp,
                                     maxLines = 1
                                 )
                             }
@@ -558,67 +570,158 @@ fun AdminDashboardScreen(
                             "Bedtime: Please plug your device into the charger. 🛌"
                         )
 
+                        val configuration = LocalConfiguration.current
+                        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
                         AlertDialog(
                             onDismissRequest = { showBroadcastDialog = false },
                             properties = DialogProperties(usePlatformDefaultWidth = false),
                             modifier = Modifier
                                 .fillMaxWidth(0.95f)
                                 .widthIn(max = 480.dp)
-                                .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(20.dp)),
-                            shape = RoundedCornerShape(20.dp),
+                                .heightIn(max = if (isLandscape) 340.dp else 660.dp)
+                                .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(24.dp)),
+                            shape = RoundedCornerShape(24.dp),
                             title = {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                                        contentAlignment = Alignment.Center
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.weight(1f, fill = false)
                                     ) {
-                                        Icon(Icons.Default.Campaign, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(22.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .background(Color(0xFF33230C), CircleShape)
+                                                .border(1.dp, Color(0xFF5C3C15), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Campaign,
+                                                contentDescription = null,
+                                                tint = Color(0xFFFBBF24),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f, fill = false)) {
+                                            Text(
+                                                text = "VOICE ALERT",
+                                                color = Color.White,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 0.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "Speak message out loud on companion",
+                                                color = Color(0xFF8896AB),
+                                                fontSize = 11.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
-                                    Column {
-                                        Text("Voice Broadcast (TTS)", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                        Text("Read aloud via Text-to-Speech on devices", color = TextSecondary, fontSize = 11.sp)
+
+                                    IconButton(
+                                        onClick = { showBroadcastDialog = false },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Close",
+                                            tint = Color(0xFF94A3B8),
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
                             },
                             text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(
-                                        "Target devices will immediately speak the announcement out loud using Android Text-to-Speech (TTS) and display a priority alert banner.",
-                                        color = TextSecondary,
-                                        fontSize = 12.sp,
-                                        lineHeight = 16.sp
-                                    )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // Target Companion Device Pill
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF131722), RoundedCornerShape(12.dp))
+                                            .border(1.dp, Color(0xFF263245), RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .background(Color(0xFF4ADE80), CircleShape)
+                                            )
+                                            val targetCount = if (connectedDevices.isNotEmpty()) connectedDevices.size else devices.size
+                                            Text(
+                                                text = if (connectedDevices.isNotEmpty()) {
+                                                    "Targeting $targetCount active companion phone(s)"
+                                                } else {
+                                                    "Targeting all registered devices"
+                                                },
+                                                color = Color(0xFFCBD5E1),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
 
-                                    // Quick Presets
-                                    Text(
-                                        "QUICK PRESETS",
-                                        color = AccentBlue,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        letterSpacing = 1.sp
-                                    )
+                                    // Quick Presets Header with Equalizer Visualizer
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "QUICK PRESETS",
+                                            color = Color(0xFF7E8B9E),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            letterSpacing = 1.sp
+                                        )
+                                        if (broadcastMsg.isNotBlank()) {
+                                            AudioEqualizerVisualizer()
+                                        }
+                                    }
+
                                     androidx.compose.foundation.lazy.LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         items(quickPresets) { preset ->
-                                            Surface(
-                                                color = SurfaceAlt,
-                                                shape = RoundedCornerShape(16.dp),
+                                            val isSelected = broadcastMsg == preset
+                                            Box(
                                                 modifier = Modifier
-                                                    .border(1.dp, Border, RoundedCornerShape(16.dp))
+                                                    .background(
+                                                        if (isSelected) Color(0xFF33230C) else Color(0xFF131722),
+                                                        RoundedCornerShape(100.dp)
+                                                    )
+                                                    .border(
+                                                        1.dp,
+                                                        if (isSelected) Color(0xFFF59E0B) else Color(0xFF2B364A),
+                                                        RoundedCornerShape(100.dp)
+                                                    )
+                                                    .clip(RoundedCornerShape(100.dp))
                                                     .clickable { broadcastMsg = preset }
+                                                    .padding(horizontal = 12.dp, vertical = 7.dp)
                                             ) {
                                                 Text(
                                                     text = preset,
-                                                    color = TextPrimary,
-                                                    fontSize = 11.sp,
-                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                    color = if (isSelected) Color(0xFFFBBF24) else Color(0xFFCBD5E1),
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                                 )
                                             }
                                         }
@@ -627,22 +730,22 @@ fun AdminDashboardScreen(
                                     OutlinedTextField(
                                         value = broadcastMsg,
                                         onValueChange = { broadcastMsg = it },
-                                        placeholder = { Text("Type announcement to read aloud...", color = TextSecondary) },
-                                        shape = RoundedCornerShape(10.dp),
+                                        placeholder = { Text("Type announcement to read aloud...", color = Color(0xFF64748B), fontSize = 13.sp) },
+                                        shape = RoundedCornerShape(16.dp),
                                         trailingIcon = {
                                             if (broadcastMsg.isNotEmpty()) {
                                                 IconButton(onClick = { broadcastMsg = "" }) {
-                                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
                                                 }
                                             }
                                         },
                                         colors = OutlinedTextFieldDefaults.colors(
-                                            focusedContainerColor = SurfaceAlt,
-                                            unfocusedContainerColor = SurfaceAlt,
-                                            focusedTextColor = TextPrimary,
-                                            unfocusedTextColor = TextPrimary,
-                                            focusedBorderColor = AccentAmber,
-                                            unfocusedBorderColor = Border
+                                            focusedContainerColor = Color(0xFF131722),
+                                            unfocusedContainerColor = Color(0xFF131722),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White,
+                                            focusedBorderColor = Color(0xFFF59E0B),
+                                            unfocusedBorderColor = Color(0xFF2B364A)
                                         ),
                                         modifier = Modifier.fillMaxWidth(),
                                         minLines = 2,
@@ -657,10 +760,10 @@ fun AdminDashboardScreen(
                                     ) {
                                         Text(
                                             text = "${broadcastMsg.length} characters",
-                                            color = TextSecondary,
+                                            color = Color(0xFF64748B),
                                             fontSize = 11.sp
                                         )
-                                        OutlinedButton(
+                                        Button(
                                             onClick = {
                                                 if (broadcastMsg.isNotBlank()) {
                                                     com.example.tts.TextToSpeechManager.speak(context, broadcastMsg)
@@ -668,44 +771,65 @@ fun AdminDashboardScreen(
                                                     android.widget.Toast.makeText(context, "Type text to test audio preview", android.widget.Toast.LENGTH_SHORT).show()
                                                 }
                                             },
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(32.dp)
+                                            shape = RoundedCornerShape(100.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF212B3B),
+                                                contentColor = Color(0xFF93C5FD)
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2F3C52)),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(34.dp)
                                         ) {
-                                            Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("TEST TTS AUDIO", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF60A5FA))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("PREVIEW TTS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF93C5FD))
                                         }
                                     }
                                 }
                             },
                             confirmButton = {
+                                val targetIps = if (connectedDevices.isNotEmpty()) connectedDevices.map { it.ip } else devices.map { it.ip }
                                 Button(
                                     onClick = {
                                         if (broadcastMsg.isNotBlank()) {
-                                            val targetIps = devices.map { it.ip }
                                             val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
                                             com.example.network.FirebaseManager.sendBroadcastAnnouncement(targetIps, broadcastMsg, adminName)
-                                            android.widget.Toast.makeText(context, "📢 Voice broadcast dispatched to ${targetIps.size} device(s)", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, "📢 Voice alert dispatched to ${targetIps.size} device(s)", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                         showBroadcastDialog = false
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
-                                    shape = RoundedCornerShape(8.dp),
-                                    enabled = broadcastMsg.isNotBlank()
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFD97706),
+                                        disabledContainerColor = Color(0xFF242A36)
+                                    ),
+                                    shape = RoundedCornerShape(100.dp),
+                                    enabled = broadcastMsg.isNotBlank(),
+                                    modifier = Modifier.height(44.dp)
                                 ) {
-                                    Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Campaign,
+                                        contentDescription = null,
+                                        tint = if (broadcastMsg.isNotBlank()) Color.Black else Color(0xFF64748B),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("TRANSMIT VOICE (${devices.size})", fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Text(
+                                        text = "TRANSMIT VOICE (${targetIps.size})",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (broadcastMsg.isNotBlank()) Color.Black else Color(0xFF64748B),
+                                        fontSize = 12.sp
+                                    )
                                 }
                             },
                             dismissButton = {
-                                TextButton(onClick = { showBroadcastDialog = false }) {
-                                    Text("CANCEL", color = TextSecondary)
+                                TextButton(
+                                    onClick = { showBroadcastDialog = false },
+                                    modifier = Modifier.height(44.dp)
+                                ) {
+                                    Text("CANCEL", color = Color(0xFF8896AB), fontWeight = FontWeight.Medium)
                                 }
                             },
-                            containerColor = Surface
+                            containerColor = Color(0xFF191F2C)
                         )
                     }
                 }
@@ -714,6 +838,7 @@ fun AdminDashboardScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Results Headline
+            // CONNECTED DEVICES Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -722,9 +847,9 @@ fun AdminDashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "DISCOVERED DEVICES",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
+                    text = "CONNECTED DEVICES",
+                    color = Color(0xFF7E8B9E),
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 1.sp
@@ -734,42 +859,91 @@ fun AdminDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (devices.isNotEmpty()) {
-                        IconButton(
-                            onClick = { showClearAllDialog = true },
-                            modifier = Modifier.size(24.dp)
+                    if (connectedDevices.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2A1519))
+                                .border(1.dp, Color(0xFF5A2228), CircleShape)
+                                .clickable { showClearAllDialog = true },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteSweep,
-                                contentDescription = "Clear All Paired Devices",
-                                tint = AccentRed.copy(alpha = 0.8f),
+                                contentDescription = "Clear All Devices",
+                                tint = AccentRed.copy(alpha = 0.9f),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     }
 
-                    IconButton(
-                        onClick = { viewModel.refreshAll(context) },
-                        enabled = !isScanning,
-                        modifier = Modifier.size(24.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF161E2E))
+                            .border(1.dp, Color(0xFF2B3A52), CircleShape)
+                            .clickable(enabled = !isScanning) { viewModel.refreshAll(context) },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Refresh",
-                            tint = if (isScanning) TextSecondary else AccentBlue,
-                            modifier = Modifier.size(16.dp)
+                            tint = if (isScanning) Color(0xFF38BDF8) else Color(0xFFCBD5E1),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer { rotationZ = if (isScanning) scanRotation else 0f }
                         )
                     }
 
-                    Box(
+                    val activeCount = connectedDevices.count { it.status == "active" || it.status == "online" }
+                    val hasActive = activeCount > 0
+                    Row(
                         modifier = Modifier
-                            .background(SurfaceAlt, RoundedCornerShape(100.dp))
-                            .border(1.dp, Border, RoundedCornerShape(100.dp))
-                            .padding(horizontal = 10.dp, vertical = 2.dp)
+                            .background(if (hasActive) Color(0xFF07271A) else Color(0xFF1E2638), RoundedCornerShape(100.dp))
+                            .border(1.dp, if (hasActive) Color(0xFF135D38) else Color(0xFF2B3A52), RoundedCornerShape(100.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (hasActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .graphicsLayer {
+                                            scaleX = pulseScale
+                                            scaleY = pulseScale
+                                            alpha = pulseAlpha
+                                        }
+                                        .background(Color(0xFF22C55E), CircleShape)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .background(
+                                        when {
+                                            hasActive -> Color(0xFF22C55E)
+                                            connectedDevices.isNotEmpty() -> Color(0xFF94A3B8)
+                                            else -> Color(0xFF60A5FA)
+                                        },
+                                        CircleShape
+                                    )
+                            )
+                        }
                         Text(
-                            text = "${devices.size} ONLINE",
-                            color = AccentGreen,
+                            text = when {
+                                hasActive -> "$activeCount ACTIVE"
+                                connectedDevices.isNotEmpty() -> "${connectedDevices.size} PAIRED"
+                                else -> "READY"
+                            },
+                            color = when {
+                                hasActive -> Color(0xFF22C55E)
+                                connectedDevices.isNotEmpty() -> Color(0xFF94A3B8)
+                                else -> Color(0xFF60A5FA)
+                            },
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace
@@ -778,7 +952,7 @@ fun AdminDashboardScreen(
                 }
             }
 
-            // Device List
+            // Connected Device List (Filtered to show only connected companion devices)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -790,81 +964,152 @@ fun AdminDashboardScreen(
                     onRefresh = { viewModel.refreshAll(context) },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (devices.isEmpty()) {
+                    if (connectedDevices.isEmpty()) {
                         Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
-                                .padding(32.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CellTower,
-                                contentDescription = null,
-                                tint = Border,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "No GuardLink devices connected.",
-                                color = TextSecondary,
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Only devices explicitly paired using past QR or 6-character code scanning will appear here.",
-                                color = Color(0xFF5E6D82),
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = { showManualDeviceManager = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                shape = RoundedCornerShape(12.dp)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color(0xFF2B364A),
+                                        shape = RoundedCornerShape(20.dp)
+                                    ),
+                                shape = RoundedCornerShape(20.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.QrCodeScanner,
-                                        contentDescription = "Scan QR",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "PAIR DEVICE (QR / CODE)",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 12.sp
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .background(Color(0xFF2B3547), CircleShape)
+                                                .border(1.dp, Color(0xFF38455A), CircleShape)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Call,
+                                                contentDescription = "Device",
+                                                tint = Color(0xFF94A3B8),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "No Connected Devices",
+                                                color = Color.White,
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Tap 'Pair Device' to link companion phone",
+                                                color = Color(0xFF8896AB),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFF0F3824), RoundedCornerShape(100.dp))
+                                                .border(1.dp, Color(0xFF166534), RoundedCornerShape(100.dp))
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "READY",
+                                                color = Color(0xFF4ADE80),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(40.dp)
+                                            .clip(RoundedCornerShape(100.dp))
+                                            .background(Color(0xFF1E3A5F))
+                                            .border(1.dp, Color(0xFF2563EB).copy(alpha = 0.4f), RoundedCornerShape(100.dp))
+                                            .clickable { showManualDeviceManager = true },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "+ Pair Device (QR / Code)",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(90.dp))
                         }
                     } else {
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(devices) { device ->
+                            items(connectedDevices, key = { it.ip }) { device ->
                                 DeviceCard(
                                     device = device,
                                     onViewScreen = { showScreenModalForDevice = device },
                                     onMoreOptions = { showDeviceControlsForDevice = device }
                                 )
                             }
+                            item {
+                                Spacer(modifier = Modifier.height(90.dp))
+                            }
                         }
                     }
                 }
             }
         }
-    }
+                    }
+                    "list" -> {
+                        FullDeviceListTab(
+                            connectedDevices = connectedDevices,
+                            devices = devices,
+                            viewModel = viewModel,
+                            isScanning = isScanning,
+                            pulseScale = pulseScale,
+                            pulseAlpha = pulseAlpha,
+                            isConnected = isConnected,
+                            adminLabel = adminLabel,
+                            onViewScreen = { showScreenModalForDevice = it },
+                            onMoreOptions = { showDeviceControlsForDevice = it },
+                            onClearAll = { showClearAllDialog = true },
+                            onPairClick = { showManualDeviceManager = true }
+                        )
+                    }
+                    "settings" -> {
+                        AdminSettingsScreen(
+                            pulseScale = pulseScale,
+                            pulseAlpha = pulseAlpha,
+                            isConnected = isConnected,
+                            adminLabel = adminLabel,
+                            onNavigateToDashboard = { selectedTab = "home" }
+                        )
+                    }
+                }
             }
+        }
 
         // Clear All Devices Confirmation Dialog
         if (showClearAllDialog) {
@@ -983,6 +1228,519 @@ fun AdminDashboardScreen(
                 onDismiss = { showManualDeviceManager = false }
             )
         }
+
+        // Floating Navigation Bar: |Home|List|settings| |+|
+        if (showDeviceControlsForDevice == null &&
+            showScreenModalForDevice == null &&
+            showCameraModalForDevice == null &&
+            showBlockModalForDevice == null &&
+            !showScheduleManager &&
+            !showManualDeviceManager
+        ) {
+            FloatingPillBottomNav(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it },
+                onPlusClick = { showManualDeviceManager = true },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
+            )
+        }
+    }
+}
+}
+
+@Composable
+fun FloatingPillBottomNav(
+    selectedTab: String,
+    onTabSelected: (String) -> Unit,
+    onPlusClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    val plusInteractionSource = remember { MutableInteractionSource() }
+    val isPlusPressed by plusInteractionSource.collectIsPressedAsState()
+    val plusScale by animateFloatAsState(
+        targetValue = if (isPlusPressed) 0.90f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "plusScale"
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Main Segmented Navigation Pill: | Home | List | Settings |
+        Surface(
+            color = Color(0xFF121722).copy(alpha = 0.96f),
+            shape = RoundedCornerShape(100.dp),
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF2A364A)),
+            shadowElevation = 14.dp,
+            modifier = Modifier.height(if (isLandscape) 48.dp else 56.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 6.dp, vertical = if (isLandscape) 3.dp else 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val navItems = listOf(
+                    Triple("home", "Home", Icons.Default.Home),
+                    Triple("list", "List", Icons.Default.FormatListBulleted),
+                    Triple("settings", "Settings", Icons.Default.Settings)
+                )
+
+                navItems.forEach { (id, label, icon) ->
+                    val isSelected = selectedTab == id
+                    val animatedBg by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF1E2D48) else Color.Transparent,
+                        animationSpec = tween(220, easing = LinearOutSlowInEasing),
+                        label = "animatedBg"
+                    )
+                    val animatedBorder by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF38BDF8).copy(alpha = 0.5f) else Color.Transparent,
+                        animationSpec = tween(220, easing = LinearOutSlowInEasing),
+                        label = "animatedBorder"
+                    )
+                    val contentColor by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF38BDF8) else Color(0xFF8F9CAE),
+                        animationSpec = tween(220),
+                        label = "contentColor"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(animatedBg)
+                            .border(1.dp, animatedBorder, RoundedCornerShape(100.dp))
+                            .clickable { onTabSelected(id) }
+                            .padding(
+                                horizontal = if (isLandscape) 12.dp else 15.dp,
+                                vertical = if (isLandscape) 6.dp else 8.dp
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = contentColor,
+                                modifier = Modifier.size(if (isLandscape) 16.dp else 18.dp)
+                            )
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn(tween(180)) + expandHorizontally(),
+                                exit = fadeOut(tween(140)) + shrinkHorizontally()
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = contentColor,
+                                    fontSize = if (isLandscape) 12.sp else 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                            if (!isSelected) {
+                                Text(
+                                    text = label,
+                                    color = contentColor,
+                                    fontSize = if (isLandscape) 11.sp else 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        // Distinct "+" Button Pill: |+|
+        Surface(
+            color = Color(0xFF2563EB),
+            shape = CircleShape,
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF60A5FA).copy(alpha = 0.6f)),
+            shadowElevation = 14.dp,
+            modifier = Modifier
+                .size(if (isLandscape) 46.dp else 54.dp)
+                .graphicsLayer {
+                    scaleX = plusScale
+                    scaleY = plusScale
+                }
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = plusInteractionSource,
+                    indication = ripple(bounded = true, color = Color.White),
+                    onClick = onPlusClick
+                )
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Pair Companion Device",
+                    tint = Color.White,
+                    modifier = Modifier.size(if (isLandscape) 22.dp else 26.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FullDeviceListTab(
+    connectedDevices: List<DiscoveredDevice>,
+    devices: List<DiscoveredDevice>,
+    viewModel: AdminDashboardViewModel,
+    isScanning: Boolean,
+    pulseScale: Float,
+    pulseAlpha: Float,
+    isConnected: Boolean,
+    adminLabel: State<String>,
+    onViewScreen: (DiscoveredDevice) -> Unit,
+    onMoreOptions: (DiscoveredDevice) -> Unit,
+    onClearAll: () -> Unit,
+    onPairClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    val scanInfiniteTransition = rememberInfiniteTransition(label = "scanListTransition")
+    val scanRotation by scanInfiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scanListRotation"
+    )
+
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredDevices = remember(connectedDevices, searchQuery) {
+        if (searchQuery.isBlank()) {
+            connectedDevices
+        } else {
+            val q = searchQuery.trim().lowercase()
+            connectedDevices.filter {
+                it.name.lowercase().contains(q) ||
+                it.ip.lowercase().contains(q) ||
+                it.activeApp.lowercase().contains(q)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = if (isLandscape) 4.dp else 8.dp)
+    ) {
+        // Space-Maximized Compact Top Header (Relocated Sync & Name Indicator)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = if (isLandscape) 2.dp else 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Relocated Sync Status & Phone Name Indicator
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF141B26), RoundedCornerShape(100.dp))
+                    .border(1.dp, Color(0xFF263347), RoundedCornerShape(100.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isConnected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .graphicsLayer {
+                                        scaleX = pulseScale
+                                        scaleY = pulseScale
+                                        alpha = pulseAlpha
+                                    }
+                                    .background(Color(0xFF22C55E), CircleShape)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .background(if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B), CircleShape)
+                        )
+                    }
+                    Text(
+                        text = if (isConnected) "Synced" else "Connecting",
+                        color = if (isConnected) Color(0xFF22C55E) else Color(0xFFF59E0B),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(3.dp)
+                            .background(Color(0xFF4A5568), CircleShape)
+                    )
+                    Text(
+                        text = adminLabel.value,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Text(
+                text = "Connected Devices",
+                color = Color.White,
+                fontSize = if (isLandscape) 20.sp else 24.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 10.dp))
+
+        // Search Bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Search connected devices...", color = Color(0xFF64748B), fontSize = 13.sp) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = Color(0xFF64748B),
+                    modifier = Modifier.size(18.dp)
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search",
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color(0xFF141923),
+                unfocusedContainerColor = Color(0xFF141923),
+                focusedBorderColor = Color(0xFF38BDF8),
+                unfocusedBorderColor = Color(0xFF243042),
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                cursorColor = Color(0xFF38BDF8)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (isLandscape) 46.dp else 52.dp)
+        )
+
+        Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 12.dp))
+
+        // Section Bar: Count & Actions (Scan & Clear)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "ALL COMPANIONS",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                )
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF1E293B), RoundedCornerShape(100.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${connectedDevices.size}",
+                        color = Color(0xFF38BDF8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Scan / Refresh Button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF161E2E))
+                        .border(1.dp, Color(0xFF2B3A52), CircleShape)
+                        .clickable(enabled = !isScanning) { viewModel.startSubnetScan(context) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh scan",
+                        tint = if (isScanning) Color(0xFF38BDF8) else Color(0xFF94A3B8),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .graphicsLayer { rotationZ = if (isScanning) scanRotation else 0f }
+                    )
+                }
+
+                // Clear All Button
+                if (connectedDevices.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2A1519))
+                            .border(1.dp, Color(0xFF5A2228), CircleShape)
+                            .clickable { onClearAll() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clear All",
+                            tint = Color(0xFFF87171),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (filteredDevices.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(1.dp, Color(0xFF2B364A), RoundedCornerShape(20.dp)),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(Color(0xFF2B3547), CircleShape)
+                                .border(1.dp, Color(0xFF38455A), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (searchQuery.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.PhoneAndroid,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "No Matching Devices" else "No Connected Devices",
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = if (searchQuery.isNotEmpty())
+                                "No companion devices found matching \"$searchQuery\"."
+                            else
+                                "Tap '+' or the button below to link a companion device via QR code or 6-digit PIN.",
+                            color = Color(0xFF8896AB),
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        if (searchQuery.isEmpty()) {
+                            Button(
+                                onClick = onPairClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                shape = RoundedCornerShape(100.dp),
+                                modifier = Modifier.fillMaxWidth().height(44.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Pair Companion Device",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                items(filteredDevices, key = { it.ip }) { device ->
+                    DeviceCard(
+                        device = device,
+                        onViewScreen = { onViewScreen(device) },
+                        onMoreOptions = { onMoreOptions(device) }
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(90.dp))
+                }
+            }
+        }
     }
 }
 
@@ -1042,45 +1800,97 @@ fun DeviceCard(
         if (clean.length > 4) "ID: ••••${clean.takeLast(4)}" else "ID: $clean"
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "device_card_scale"
+    )
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF191F2C)),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(LiquidGlassGlareGradient)
+            .scale(cardScale)
+            .clip(RoundedCornerShape(20.dp))
             .border(
-                width = 1.2.dp,
-                brush = if (device.status == "blocked") GlassRedBorderBrush else LiquidGlassChromaticBorder,
-                shape = RoundedCornerShape(14.dp)
+                width = 1.dp,
+                color = Color(0xFF2B364A),
+                shape = RoundedCornerShape(20.dp)
             )
-            .clickable { onMoreOptions() },
-        shape = RoundedCornerShape(14.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onMoreOptions() },
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Top Row: Icon + Name & Truncated UUID + Status Badge & Battery
+            // Top Row: Avatar | Name & ID | Status Badge & Battery Indicator
+            val isInactive = device.status == "inactive" || device.status == "offline"
+            val isActive = !isInactive && (device.status == "active" || device.status == "online")
+            val isBlocked = !isInactive && device.status == "blocked"
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Device Icon container (Liquid Glass frosted container)
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(SurfaceAlt, RoundedCornerShape(10.dp))
-                        .border(1.dp, GlassBorderBrush, RoundedCornerShape(10.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Smartphone,
-                        contentDescription = "Device Icon",
-                        tint = if (device.status == "blocked") AccentRed else AccentBlue,
-                        modifier = Modifier.size(22.dp)
-                    )
+                // Circular Avatar Container with Animated Beacon Ripple when Active
+                Box(contentAlignment = Alignment.Center) {
+                    if (isActive) {
+                        val beaconTransition = rememberInfiniteTransition(label = "beacon_ripple")
+                        val beaconScale by beaconTransition.animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.38f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1500, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "beacon_scale"
+                        )
+                        val beaconAlpha by beaconTransition.animateFloat(
+                            initialValue = 0.55f,
+                            targetValue = 0f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1500, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "beacon_alpha"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .scale(beaconScale)
+                                .background(Color(0xFF10B981).copy(alpha = beaconAlpha), CircleShape)
+                        )
+                    }
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                if (isInactive) Color(0xFF1B2333) else if (isActive) Color(0xFF122C2A) else Color(0xFF2B3547),
+                                CircleShape
+                            )
+                            .border(
+                                1.dp,
+                                if (isInactive) Color(0xFF263249) else if (isActive) Color(0xFF10B981).copy(alpha = 0.6f) else Color(0xFF38455A),
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Device",
+                            tint = if (isInactive) Color(0xFF64748B) else if (isActive) Color(0xFF34D399) else Color(0xFF94A3B8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1089,8 +1899,8 @@ fun DeviceCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = device.name,
-                        color = TextPrimary,
-                        fontSize = 15.sp,
+                        color = Color.White,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1106,43 +1916,44 @@ fun DeviceCard(
                     ) {
                         Text(
                             text = truncatedId,
-                            color = TextSecondary,
-                            fontSize = 11.sp,
+                            color = Color(0xFF8896AB),
+                            fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Copy ID",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(12.dp)
+                            tint = Color(0xFF8896AB),
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Active Badge (mint emerald) + Battery Indicator
+                // Status Badge & Battery Indicator
                 Column(horizontalAlignment = Alignment.End) {
-                    // Status Badge (mint emerald for active/online)
                     Box(
                         modifier = Modifier
                             .background(
-                                when (device.status) {
-                                    "active", "online" -> AccentGreen.copy(alpha = 0.15f)
-                                    "blocked" -> AccentRed.copy(alpha = 0.15f)
-                                    else -> AccentAmber.copy(alpha = 0.15f)
+                                when {
+                                    isActive -> Color(0xFF0F3824)
+                                    isBlocked -> Color(0xFF381016)
+                                    isInactive -> Color(0xFF1E2638)
+                                    else -> Color(0xFF33230C)
                                 },
-                                RoundedCornerShape(6.dp)
+                                RoundedCornerShape(100.dp)
                             )
                             .border(
                                 1.dp,
-                                when (device.status) {
-                                    "active", "online" -> GlassGreenBorderBrush
-                                    "blocked" -> GlassRedBorderBrush
-                                    else -> GlassAmberBorderBrush
+                                when {
+                                    isActive -> Color(0xFF166534)
+                                    isBlocked -> Color(0xFF651624)
+                                    isInactive -> Color(0xFF334155)
+                                    else -> Color(0xFF5C3C15)
                                 },
-                                RoundedCornerShape(6.dp)
+                                RoundedCornerShape(100.dp)
                             )
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
@@ -1154,24 +1965,30 @@ fun DeviceCard(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .background(
-                                        when (device.status) {
-                                            "active", "online" -> AccentGreen
-                                            "blocked" -> AccentRed
-                                            else -> AccentAmber
+                                        when {
+                                            isActive -> Color(0xFF22C55E)
+                                            isBlocked -> Color(0xFFEF4444)
+                                            isInactive -> Color(0xFF94A3B8)
+                                            else -> Color(0xFFFBBF24)
                                         },
                                         CircleShape
                                     )
                             )
                             Text(
-                                text = if (device.status == "active" || device.status == "online") "ONLINE" else device.status.uppercase(),
-                                color = when (device.status) {
-                                    "active", "online" -> AccentGreen
-                                    "blocked" -> AccentRed
-                                    else -> AccentAmber
+                                text = when {
+                                    isActive -> "ACTIVE"
+                                    isBlocked -> "BLOCKED"
+                                    isInactive -> "INACTIVE"
+                                    else -> device.status.uppercase()
                                 },
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
+                                color = when {
+                                    isActive -> Color(0xFF4ADE80)
+                                    isBlocked -> Color(0xFFF87171)
+                                    isInactive -> Color(0xFF94A3B8)
+                                    else -> Color(0xFFFBBF24)
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -1186,78 +2003,59 @@ fun DeviceCard(
                         Icon(
                             imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
                             contentDescription = "Battery",
-                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else TextSecondary,
-                            modifier = Modifier.size(13.dp)
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(14.dp)
                         )
                         Text(
                             text = "${device.batteryLevel}%",
-                            color = TextSecondary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = FontFamily.Monospace
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
-            // Split Action Buttons at bottom of card
+            // Split Action Pill Buttons: View Screen & Manage
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // View Screen (Liquid Glass Vibrant Button)
-                Button(
-                    onClick = onViewScreen,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    shape = RoundedCornerShape(8.dp),
+                // View Screen (Electric Blue pill button / Muted when inactive)
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(36.dp)
-                        .background(GlassButtonGradient, RoundedCornerShape(8.dp))
-                        .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(8.dp)),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(if (isInactive) Color(0xFF142236) else Color(0xFF1E3A5F))
+                        .border(1.dp, if (isInactive) Color(0xFF1E3352) else Color(0xFF2563EB).copy(alpha = 0.4f), RoundedCornerShape(100.dp))
+                        .clickable { onViewScreen() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ScreenShare,
-                        contentDescription = "View Screen",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "View Screen",
-                        color = TextPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        color = if (isInactive) Color(0xFF7E8B9E) else Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                // More Options (Frosted Glass Button)
-                OutlinedButton(
-                    onClick = onMoreOptions,
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorderBrush),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = SurfaceAlt,
-                        contentColor = TextPrimary
-                    ),
+                // Manage (Dark Slate pill button)
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(36.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(Color(0xFF262E3E))
+                        .border(1.dp, Color(0xFF374358), RoundedCornerShape(100.dp))
+                        .clickable { onMoreOptions() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "More Options",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "More Options",
-                        color = TextPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "Manage",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -1272,10 +2070,68 @@ fun DeviceControlsScreen(
     onDismiss: () -> Unit,
     onBlockClick: () -> Unit,
     onCameraClick: () -> Unit,
-    onScreenClick: () -> Unit
+    onScreenClick: () -> Unit,
+    onScheduleClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showRemoveDialog by remember { mutableStateOf(false) }
+
+    // Intercom Audio State & Walkie-Talkie logic
+    val cameraAudio by viewModel.cameraAudio.collectAsState(initial = emptyMap())
+    val deviceAudioSegment = cameraAudio[device.ip]
+    var isSpeaking by remember { mutableStateOf(false) }
+
+    // Automatically play target device's voice through speaker when user is transmitting
+    LaunchedEffect(deviceAudioSegment, device.deviceSpeaking, isSpeaking) {
+        if (!deviceAudioSegment.isNullOrEmpty() && device.deviceSpeaking && !isSpeaking) {
+            com.example.network.AudioStreamManager.playAudioSegment(deviceAudioSegment)
+        }
+    }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            isSpeaking = true
+        } else {
+            android.widget.Toast.makeText(context, "Microphone permission is required for Intercom", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(isSpeaking) {
+        if (isSpeaking) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) 
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                com.example.network.AudioStreamManager.startRecording(context)
+                try {
+                    while (isSpeaking) {
+                        val base64Bytes = com.example.network.AudioStreamManager.getLatestAudioSegmentBase64()
+                        if (base64Bytes.isNotEmpty()) {
+                            com.example.network.FirebaseManager.sendIntercomAudio(device.ip, base64Bytes, true)
+                        }
+                        kotlinx.coroutines.delay(180L)
+                    }
+                } finally {
+                    com.example.network.AudioStreamManager.stopRecording()
+                    com.example.network.FirebaseManager.sendIntercomAudio(device.ip, "", false)
+                }
+            } else {
+                isSpeaking = false
+            }
+        }
+    }
+
+    // Soundwave infinite transition for intercom & beacon
+    val intercomTransition = rememberInfiniteTransition(label = "intercom_wave")
+    val waveScale by intercomTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "wave_scale"
+    )
 
     if (showRemoveDialog) {
         AlertDialog(
@@ -1291,7 +2147,7 @@ fun DeviceControlsScreen(
                         tint = AccentRed
                     )
                     Text(
-                        text = "Remove Device?",
+                        text = "Unpair & Remove Device?",
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
@@ -1300,21 +2156,23 @@ fun DeviceControlsScreen(
             },
             text = {
                 Text(
-                    text = "Are you sure you want to permanently remove ${device.name}? This will clear all synchronization variables, live frames, active rules, and logs.",
+                    text = "Are you sure you want to permanently unpair ${device.name}? This removes all local device registrations, synchronization channels, real-time monitoring feeds, and security locks.",
                     color = TextSecondary,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
                 )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.removeDevice(device.ip)
                         showRemoveDialog = false
                         onDismiss()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = AccentRed)
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("REMOVE", fontWeight = FontWeight.Bold)
+                    Text("CONFIRM UNPAIR", fontWeight = FontWeight.Bold, color = TextPrimary)
                 }
             },
             dismissButton = {
@@ -1325,8 +2183,9 @@ fun DeviceControlsScreen(
                     Text("CANCEL")
                 }
             },
-            containerColor = SurfaceAlt,
-            iconContentColor = AccentRed
+            containerColor = Color(0xFF131722),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.border(1.dp, Border, RoundedCornerShape(20.dp))
         )
     }
 
@@ -1340,816 +2199,1648 @@ fun DeviceControlsScreen(
             modifier = Modifier
                 .widthIn(max = 720.dp)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-        // Top App Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+            val isControlInactive = device.status == "inactive" || device.status == "offline"
+            val isControlActive = !isControlInactive && (device.status == "online" || device.status == "active")
+            val isControlBlocked = !isControlInactive && device.status == "blocked"
+
+            // --- Top Hero Navigation Bar ---
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .background(SurfaceAlt, CircleShape)
-                        .border(1.dp, Border, CircleShape)
-                        .size(36.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Go Back",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .background(Color(0xFF141923), CircleShape)
+                            .border(1.dp, Border, CircleShape)
+                            .size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Go Back",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Device Avatar with glowing status ring
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFF1B2332), CircleShape)
+                            .border(
+                                width = 1.5.dp,
+                                color = when {
+                                    isControlActive -> AccentGreen
+                                    isControlBlocked -> AccentRed
+                                    else -> Color(0xFF64748B)
+                                },
+                                shape = CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Smartphone,
+                            contentDescription = "Device",
+                            tint = when {
+                                isControlActive -> AccentGreen
+                                isControlBlocked -> AccentRed
+                                else -> TextSecondary
+                            },
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                            text = device.name,
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.clickable {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Device ID", device.ip))
+                                android.widget.Toast.makeText(context, "Device ID copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            val shortId = remember(device.ip) {
+                                val clean = device.ip.filter { it.isLetterOrDigit() }
+                                if (clean.length > 6) "ID: ••••${clean.takeLast(6)}" else "ID: $clean"
+                            }
+                            Text(
+                                text = shortId,
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy ID",
+                                tint = TextSecondary.copy(alpha = 0.7f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
-                Column {
-                    Text(
-                        text = device.name,
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Live Status Pill Badge
+                Box(
+                    modifier = Modifier
+                        .background(
+                            when {
+                                isControlActive -> Color(0xFF0D3320)
+                                isControlBlocked -> Color(0xFF381016)
+                                else -> Color(0xFF1E2638)
+                            },
+                            RoundedCornerShape(100.dp)
+                        )
+                        .border(
+                            1.dp,
+                            when {
+                                isControlActive -> Color(0xFF166534)
+                                isControlBlocked -> Color(0xFF651624)
+                                else -> Color(0xFF334155)
+                            },
+                            RoundedCornerShape(100.dp)
+                        )
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
                     Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    when {
+                                        isControlActive -> Color(0xFF22C55E)
+                                        isControlBlocked -> Color(0xFFEF4444)
+                                        else -> Color(0xFF94A3B8)
+                                    },
+                                    CircleShape
+                                )
+                        )
+                        Text(
+                            text = when {
+                                isControlActive -> "ONLINE"
+                                isControlBlocked -> "BLOCKED"
+                                else -> "INACTIVE"
+                            },
+                            color = when {
+                                isControlActive -> Color(0xFF4ADE80)
+                                isControlBlocked -> Color(0xFFF87171)
+                                else -> Color(0xFF94A3B8)
+                            },
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // --- Real-Time Telemetry & Status HUD Bar ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF131824)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Border, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Battery item
+                    Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
-                            contentDescription = "Battery Status",
-                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else TextSecondary,
-                            modifier = Modifier.size(13.dp)
+                            contentDescription = "Battery",
+                            tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else Color(0xFF60A5FA),
+                            modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = "${device.batteryLevel}%${if (device.isCharging) " (Charging)" else ""}",
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
+                        Column {
+                            Text("BATTERY", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Text("${device.batteryLevel}%${if (device.isCharging) " ⚡" else ""}", color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    }
+
+                    Box(modifier = Modifier.width(1.dp).height(24.dp).background(BorderSubtle))
+
+                    // App item
+                    Row(
+                        modifier = Modifier.weight(1.1f).padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Smartphone,
+                            contentDescription = "Active App",
+                            tint = Color(0xFFA78BFA),
+                            modifier = Modifier.size(16.dp)
                         )
+                        Column {
+                            Text("FOREGROUND", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Text(device.activeApp.take(12), color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+
+                    Box(modifier = Modifier.width(1.dp).height(24.dp).background(BorderSubtle))
+
+                    // Audio Mode item
+                    Row(
+                        modifier = Modifier.weight(0.9f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "Audio Mode",
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Column {
+                            Text("RINGER", color = TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Text(device.ringerMode.take(10), color = TextPrimary, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
 
-            // Active Pill (Mint emerald / red)
-            Box(
-                modifier = Modifier
-                    .background(
-                        when (device.status) {
-                            "online", "active" -> AccentGreen.copy(alpha = 0.15f)
-                            "blocked" -> AccentRed.copy(alpha = 0.15f)
-                            else -> AccentAmber.copy(alpha = 0.15f)
-                        },
-                        RoundedCornerShape(100.dp)
-                    )
-                    .border(
-                        1.dp,
-                        when (device.status) {
-                            "online", "active" -> AccentGreen.copy(alpha = 0.3f)
-                            "blocked" -> AccentRed.copy(alpha = 0.3f)
-                            else -> AccentAmber.copy(alpha = 0.3f)
-                        },
-                        RoundedCornerShape(100.dp)
-                    )
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // --- Quick Action Shortcuts Grid ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // 1. Mirror Screen Quick Button
+                Button(
+                    onClick = onScreenClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283C)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp)),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
                 ) {
+                    Icon(Icons.Default.ScreenShare, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Screen", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                // 2. Camera Recon Quick Button
+                Button(
+                    onClick = onCameraClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283C)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp)),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Camera", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                // 3. Siren Alarm Quick Toggle Button
+                Button(
+                    onClick = { viewModel.toggleRing(device.ip, !device.ringRequested) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (device.ringRequested) AccentRed else Color(0xFF1E283C)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .border(1.dp, if (device.ringRequested) AccentRed else Color(0xFF334155), RoundedCornerShape(12.dp)),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.VolumeUp,
+                        contentDescription = null,
+                        tint = if (device.ringRequested) TextPrimary else AccentAmber,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        if (device.ringRequested) "Stop Ring" else "Siren",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            var selectedTab by remember { mutableIntStateOf(0) }
+            val tabTitles = listOf("Live Feeds", "Command Hub", "Lock Studio", "Audit Logs")
+            val tabIcons = listOf(Icons.Default.Videocam, Icons.Default.Bolt, Icons.Default.Palette, Icons.Default.History)
+
+            var activeTheme by remember(device.lockTheme) { mutableStateOf(device.lockTheme) }
+            var activeIcon by remember(device.lockWarningIcon) { mutableStateOf(device.lockWarningIcon) }
+            var activeWallpaper by remember(device.lockWallpaper) { mutableStateOf(device.lockWallpaper) }
+
+            var adminChatMessages by remember { mutableStateOf<List<com.example.data.ChatMessage>>(emptyList()) }
+            var adminChatInputText by remember { mutableStateOf("") }
+            var reconBroadcasts by remember { mutableStateOf<List<com.example.data.ReconBroadcast>>(emptyList()) }
+            var reconTerminalInputText by remember { mutableStateOf("") }
+            var selectedCommMode by remember { mutableIntStateOf(0) } // 0: Direct Chat, 1: Recon Broadcast Terminal
+            var operationLogs by remember { mutableStateOf<List<com.example.data.AdminLog>>(emptyList()) }
+
+            // Persistent Firebase listeners for real-time telemetry & sync
+            DisposableEffect(device.ip) {
+                val chatRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("devices").child(device.ip).child("chat")
+                val chatListener = object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val list = mutableListOf<com.example.data.ChatMessage>()
+                        for (child in snapshot.children) {
+                            val id = child.child("id").getValue(String::class.java) ?: ""
+                            val sender = child.child("sender").getValue(String::class.java) ?: ""
+                            val msg = child.child("message").getValue(String::class.java) ?: ""
+                            val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                            list.add(com.example.data.ChatMessage(id, sender, msg, ts))
+                        }
+                        adminChatMessages = list.sortedBy { it.timestamp }
+                    }
+                    override fun onCancelled(error: DatabaseError) {}
+                }
+                chatRef.addValueEventListener(chatListener)
+
+                val reconRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("devices").child(device.ip).child("recon_broadcasts")
+                val reconListener = object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val list = mutableListOf<com.example.data.ReconBroadcast>()
+                        for (child in snapshot.children) {
+                            val id = child.child("id").getValue(String::class.java) ?: ""
+                            val sender = child.child("sender").getValue(String::class.java) ?: "Admin"
+                            val msg = child.child("message").getValue(String::class.java) ?: ""
+                            val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                            val status = child.child("status").getValue(String::class.java) ?: "TRANSMITTED"
+                            list.add(com.example.data.ReconBroadcast(id, sender, msg, ts, status))
+                        }
+                        reconBroadcasts = list.sortedByDescending { it.timestamp }
+                    }
+                    override fun onCancelled(error: DatabaseError) {}
+                }
+                reconRef.addValueEventListener(reconListener)
+
+                val logsRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("devices").child(device.ip).child("logs")
+                val logsListener = object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val list = mutableListOf<com.example.data.AdminLog>()
+                        for (child in snapshot.children) {
+                            val id = child.child("id").getValue(String::class.java) ?: ""
+                            val action = child.child("action").getValue(String::class.java) ?: ""
+                            val details = child.child("details").getValue(String::class.java) ?: ""
+                            val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                            list.add(com.example.data.AdminLog(id, action, details, ts))
+                        }
+                        operationLogs = list.sortedByDescending { it.timestamp }
+                    }
+                    override fun onCancelled(error: DatabaseError) {}
+                }
+                logsRef.addValueEventListener(logsListener)
+
+                onDispose {
+                    chatRef.removeEventListener(chatListener)
+                    reconRef.removeEventListener(reconListener)
+                    logsRef.removeEventListener(logsListener)
+                }
+            }
+
+            // --- 4-Pill Segmented Navigation Bar ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF131722))
+                    .border(1.dp, Border, RoundedCornerShape(14.dp))
+                    .padding(4.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabTitles.forEachIndexed { index, title ->
+                    val isTabSelected = selectedTab == index
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
-                            .background(
-                                when (device.status) {
-                                    "online", "active" -> AccentGreen
-                                    "blocked" -> AccentRed
-                                    else -> AccentAmber
-                                },
-                                CircleShape
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isTabSelected) Color(0xFF253347) else Color.Transparent)
+                            .border(
+                                width = if (isTabSelected) 1.dp else 0.dp,
+                                color = if (isTabSelected) Color(0xFF3B82F6).copy(alpha = 0.5f) else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
                             )
-                    )
-                    Text(
-                        text = if (device.status == "online" || device.status == "active") "ONLINE" else device.status.uppercase(),
-                        color = when (device.status) {
-                            "online", "active" -> AccentGreen
-                            "blocked" -> AccentRed
-                            else -> AccentAmber
-                        },
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        var selectedTab by remember { mutableIntStateOf(0) }
-        val tabList = listOf("Live Feeds", "Command Hub", "Lock Studio", "Audit Logs")
-
-        var activeTheme by remember(device.lockTheme) { mutableStateOf(device.lockTheme) }
-        var activeIcon by remember(device.lockWarningIcon) { mutableStateOf(device.lockWarningIcon) }
-        var activeWallpaper by remember(device.lockWallpaper) { mutableStateOf(device.lockWallpaper) }
-
-        var adminChatMessages by remember { mutableStateOf<List<com.example.data.ChatMessage>>(emptyList()) }
-        var adminChatInputText by remember { mutableStateOf("") }
-        var operationLogs by remember { mutableStateOf<List<com.example.data.AdminLog>>(emptyList()) }
-
-        // Persistent listeners for real-time Firebase telemetry & sync
-        DisposableEffect(device.ip) {
-            val chatRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
-                .getReference("devices").child(device.ip).child("chat")
-            val chatListener = object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<com.example.data.ChatMessage>()
-                    for (child in snapshot.children) {
-                        val id = child.child("id").getValue(String::class.java) ?: ""
-                        val sender = child.child("sender").getValue(String::class.java) ?: ""
-                        val msg = child.child("message").getValue(String::class.java) ?: ""
-                        val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                        list.add(com.example.data.ChatMessage(id, sender, msg, ts))
-                    }
-                    adminChatMessages = list.sortedBy { it.timestamp }
-                }
-                override fun onCancelled(error: DatabaseError) {}
-            }
-            chatRef.addValueEventListener(chatListener)
-
-            val logsRef = FirebaseDatabase.getInstance("https://guard-link-81956-default-rtdb.asia-southeast1.firebasedatabase.app/")
-                .getReference("devices").child(device.ip).child("logs")
-            val logsListener = object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<com.example.data.AdminLog>()
-                    for (child in snapshot.children) {
-                        val id = child.child("id").getValue(String::class.java) ?: ""
-                        val action = child.child("action").getValue(String::class.java) ?: ""
-                        val details = child.child("details").getValue(String::class.java) ?: ""
-                        val ts = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                        list.add(com.example.data.AdminLog(id, action, details, ts))
-                    }
-                    operationLogs = list.sortedByDescending { it.timestamp }
-                }
-                override fun onCancelled(error: DatabaseError) {}
-            }
-            logsRef.addValueEventListener(logsListener)
-
-            onDispose {
-                chatRef.removeEventListener(chatListener)
-                logsRef.removeEventListener(logsListener)
-            }
-        }
-
-        // 4-Tab Navigation Bar
-        ScrollableTabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = Surface,
-            contentColor = AccentBlue,
-            edgePadding = 0.dp,
-            divider = { HorizontalDivider(color = Border, thickness = 1.dp) },
-            indicator = { tabPositions ->
-                if (selectedTab < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = AccentBlue,
-                        height = 2.dp
-                    )
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, Border, RoundedCornerShape(10.dp))
-        ) {
-            tabList.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = {
-                        Text(
-                            text = title,
-                            color = if (selectedTab == index) AccentBlue else TextSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Content Scrollable Column based on active Tab
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            when (selectedTab) {
-                0 -> {
-                    // TAB 1: Live Feeds
-                    // 1. Live Screen Stream Card
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp))
-                            .clickable { onScreenClick() }
+                            .clickable { selectedTab = index }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .background(AccentPurple.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ScreenShare,
-                                        contentDescription = "Screen Stream",
-                                        tint = AccentPurple,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "LIVE SCREEN STREAM",
-                                        color = TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Low-latency live visual feed in RAM",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
                             Icon(
-                                imageVector = Icons.Default.ChevronRight,
+                                imageVector = tabIcons[index],
                                 contentDescription = null,
-                                tint = TextSecondary
+                                tint = if (isTabSelected) Color(0xFF60A5FA) else TextSecondary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = title,
+                                color = if (isTabSelected) TextPrimary else TextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
+                }
+            }
 
-                    // 2. Camera Feed Card
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp))
-                            .clickable { onCameraClick() }
-                    ) {
-                        Row(
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // --- Tab Contents Container ---
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        // ==================== TAB 0: LIVE FEEDS ====================
+                        // 1. Live Screen Stream Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp))
+                                .clickable { onScreenClick() }
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Videocam,
-                                        contentDescription = "Camera Feed",
-                                        tint = AccentBlue,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "LIVE CAMERA FEED",
-                                        color = TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Front / Rear sensor streaming",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                            Icon(
-                                imageVector = Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = TextSecondary
-                            )
-                        }
-                    }
-
-                    // 3. Mini-map with coordinates and "Play Finder Sound"
-                    FindMyDeviceMapCard(device = device, viewModel = viewModel)
-                }
-
-                1 -> {
-                    // TAB 2: Command Hub
-                    Text(
-                        text = "SECURITY INTERVENTIONS",
-                        color = AccentBlue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
-
-                    // Block / Unblock / Retry
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (device.status == "offline" || device.status == "connecting") {
-                            Button(
-                                onClick = { viewModel.retryConnect(device.ip) },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = device.status != "connecting"
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    tint = TextPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    if (device.status == "connecting") "CONNECTING..." else "RETRY CONNECTION",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = TextPrimary,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
-                        } else {
-                            Button(
-                                onClick = onBlockClick,
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = TextPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "BLOCK SCREEN",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = TextPrimary,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .background(AccentPurple.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                                .border(1.dp, AccentPurple.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ScreenShare,
+                                                contentDescription = "Screen Stream",
+                                                tint = AccentPurple,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "LIVE SCREEN STREAM",
+                                                color = TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 0.5.sp
+                                            )
+                                            Text(
+                                                text = "Zero-latency remote screen capture in RAM",
+                                                color = TextSecondary,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+                                }
 
-                            Button(
-                                onClick = { viewModel.unblockScreen(device.ip) },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = device.status == "blocked"
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LockOpen,
-                                    contentDescription = null,
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "UNBLOCK",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color.Black,
-                                    letterSpacing = 0.5.sp
-                                )
+                                Button(
+                                    onClick = onScreenClick,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C1E45)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(42.dp)
+                                        .border(1.dp, AccentPurple.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("LAUNCH SCREEN MIRROR", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
-                    }
 
-                    // Loud Finder Sound Card
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
+                        // 2. Live Camera Recon Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp))
+                                .clickable { onCameraClick() }
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.VolumeUp,
-                                        contentDescription = "Finder Sound",
-                                        tint = AccentAmber,
-                                        modifier = Modifier.size(22.dp)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .background(AccentBlue.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                                .border(1.dp, AccentBlue.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Videocam,
+                                                contentDescription = "Camera Feed",
+                                                tint = AccentBlue,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "LIVE CAMERA RECON",
+                                                color = TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 0.5.sp
+                                            )
+                                            Text(
+                                                text = "Real-time Front / Rear optical stream with audio",
+                                                color = TextSecondary,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
                                 }
-                                Column {
-                                    Text(
-                                        text = "LOUD FINDER SOUND",
-                                        color = TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (device.ringRequested) "Alarm ringing on target device" else "Trigger high-volume emergency alert",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val nextLens = if (device.cameraLens == "front") "back" else "front"
+                                            viewModel.setCameraLens(device.ip, nextLens)
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF60A5FA)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.4f)),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                    ) {
+                                        Icon(Icons.Default.FlipCameraAndroid, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("${device.cameraLens.uppercase()} LENS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = onCameraClick,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A5F)),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier
+                                            .weight(1.4f)
+                                            .height(42.dp)
+                                            .border(1.dp, Color(0xFF2563EB).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("START CAMERA", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
-                            }
-                            Button(
-                                onClick = { viewModel.toggleRing(device.ip, !device.ringRequested) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (device.ringRequested) AccentRed else AccentAmber
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(
-                                    text = if (device.ringRequested) "STOP" else "RING",
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (device.ringRequested) TextPrimary else Color.Black,
-                                    fontSize = 11.sp
-                                )
                             }
                         }
-                    }
 
-                    // Voice Broadcast & Text-To-Speech Card for this target device
-                    var deviceTtsText by remember(device.ip) { mutableStateOf("") }
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        // 3. Intercom Push-to-Talk Walkie-Talkie Card
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = when {
+                                    isSpeaking -> Color(0xFF152A15)
+                                    device.deviceSpeaking -> Color(0xFF2A1D15)
+                                    else -> Color(0xFF141A26)
+                                }
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    1.dp,
+                                    when {
+                                        isSpeaking -> AccentGreen.copy(alpha = 0.6f)
+                                        device.deviceSpeaking -> Color(0xFFE57373).copy(alpha = 0.6f)
+                                        else -> Color(0xFF28354D)
+                                    },
+                                    RoundedCornerShape(16.dp)
+                                )
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .background(
+                                                    if (isSpeaking) AccentGreen.copy(alpha = 0.25f)
+                                                    else if (device.deviceSpeaking) Color(0xFFE57373).copy(alpha = 0.25f)
+                                                    else AccentTeal.copy(alpha = 0.18f),
+                                                    RoundedCornerShape(12.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isSpeaking) Icons.Default.Mic else if (device.deviceSpeaking) Icons.Default.VolumeUp else Icons.Default.GraphicEq,
+                                                contentDescription = "Intercom",
+                                                tint = if (isSpeaking) AccentGreen else if (device.deviceSpeaking) Color(0xFFE57373) else AccentTeal,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = when {
+                                                    isSpeaking -> "TRANSMITTING TO DEVICE..."
+                                                    device.deviceSpeaking -> "DEVICE IS SPEAKING..."
+                                                    else -> "TWO-WAY WALKIE-TALKIE"
+                                                },
+                                                color = if (isSpeaking) AccentGreen else if (device.deviceSpeaking) Color(0xFFE57373) else TextPrimary,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Text(
+                                                text = if (device.deviceSpeaking) "Target user audio streaming live via speaker" else "Hold push-to-talk to speak directly to target",
+                                                color = TextSecondary,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Interactive Push-to-Talk Button
                                 Box(
                                     modifier = Modifier
-                                        .size(40.dp)
-                                        .background(AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isSpeaking) AccentGreen else if (device.deviceSpeaking) Color(0xFF4A2525) else Color(0xFF1B2636)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (isSpeaking) AccentGreen else if (device.deviceSpeaking) Color(0xFFE57373) else Color(0xFF2E3E56),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .pointerInput(device.deviceSpeaking) {
+                                            detectTapGestures(
+                                                onPress = {
+                                                    if (!device.deviceSpeaking) {
+                                                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+                                                            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                            isSpeaking = true
+                                                            tryAwaitRelease()
+                                                            isSpeaking = false
+                                                        } else {
+                                                            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Campaign,
-                                        contentDescription = "Voice Broadcast",
-                                        tint = AccentAmber,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "VOICE BROADCAST (TTS)",
-                                        color = TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Type text to read aloud on this device via TTS",
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-
-                            // Quick preset chips
-                            val targetPresets = listOf(
-                                "Dinner is ready! 🍽️",
-                                "Screen time is up! ⏳",
-                                "Please call me back. 📞",
-                                "Come here right now. 🏃"
-                            )
-                            androidx.compose.foundation.lazy.LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(targetPresets) { preset ->
-                                    Surface(
-                                        color = SurfaceAlt,
-                                        shape = RoundedCornerShape(14.dp),
-                                        modifier = Modifier
-                                            .border(1.dp, Border, RoundedCornerShape(14.dp))
-                                            .clickable { deviceTtsText = preset }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
+                                        Icon(
+                                            imageVector = if (isSpeaking) Icons.Default.Mic else Icons.Default.GraphicEq,
+                                            contentDescription = null,
+                                            tint = if (isSpeaking) Color.Black else if (device.deviceSpeaking) TextSecondary else Color(0xFF60A5FA),
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                         Text(
-                                            text = preset,
-                                            color = TextPrimary,
-                                            fontSize = 10.sp,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            text = when {
+                                                isSpeaking -> "TRANSMITTING LIVE AUDIO (RELEASE TO STOP)"
+                                                device.deviceSpeaking -> "USER SPEAKING (MIC MUTED)"
+                                                else -> "HOLD TO SPEAK TO TARGET PHONE"
+                                            },
+                                            color = if (isSpeaking) Color.Black else if (device.deviceSpeaking) TextSecondary else TextPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
                                         )
                                     }
                                 }
                             }
-
-                            OutlinedTextField(
-                                value = deviceTtsText,
-                                onValueChange = { deviceTtsText = it },
-                                placeholder = { Text("Type announcement for ${device.name}...", color = TextSecondary, fontSize = 12.sp) },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceAlt,
-                                    unfocusedContainerColor = SurfaceAlt,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                    focusedBorderColor = AccentAmber,
-                                    unfocusedBorderColor = Border
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 3
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        if (deviceTtsText.isNotBlank()) {
-                                            com.example.tts.TextToSpeechManager.speak(context, deviceTtsText)
-                                        } else {
-                                            android.widget.Toast.makeText(context, "Type text to test audio preview", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
-                                    modifier = Modifier.height(34.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("TEST AUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = {
-                                        if (deviceTtsText.isNotBlank()) {
-                                            val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
-                                            com.example.network.FirebaseManager.sendBroadcastAnnouncement(
-                                                listOf(device.ip),
-                                                deviceTtsText,
-                                                adminName
-                                            )
-                                            android.widget.Toast.makeText(context, "📢 Voice announcement sent to ${device.name}", android.widget.Toast.LENGTH_SHORT).show()
-                                            deviceTtsText = ""
-                                        }
-                                    },
-                                    enabled = deviceTtsText.isNotBlank(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.height(34.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("SPEAK ON DEVICE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                }
-                            }
                         }
+
+                        // 4. Find My Device Mini-map Card
+                        FindMyDeviceMapCard(device = device, viewModel = viewModel)
                     }
 
-                    // Device Telemetry Metrics
-                    Text(
-                        text = "DEVICE TELEMETRY METRICS",
-                        color = AccentBlue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (device.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
-                                        contentDescription = "Battery Status",
-                                        tint = if (device.batteryLevel < 20) AccentRed else if (device.isCharging) AccentGreen else AccentAmber,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text("Battery Status", color = TextSecondary, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "${if (device.isCharging) "⚡ " else "🔌 "}${device.batteryLevel}%",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Smartphone,
-                                        contentDescription = "Active App",
-                                        tint = AccentBlue,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text("Active App", color = TextSecondary, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = device.activeApp,
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.VolumeUp,
-                                        contentDescription = "Ringer Mode",
-                                        tint = AccentGreen,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text("Audio Mode", color = TextSecondary, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = device.ringerMode,
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    // Admin Chat Terminal (Only visible if blocked)
-                    if (device.status == "blocked") {
+                    1 -> {
+                        // ==================== TAB 1: COMMAND HUB ====================
                         Text(
-                            text = "ADMINISTRATOR RECON CHAT TERMINAL",
+                            text = "SECURITY INTERVENTIONS",
                             color = AccentBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Border, RoundedCornerShape(12.dp)),
-                            shape = RoundedCornerShape(12.dp)
+
+                        // Block / Unblock Primary Actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Box(
+                            if (device.status == "blocked") {
+                                Button(
+                                    onClick = { viewModel.unblockScreen(device.ip) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(130.dp)
-                                        .background(SurfaceAlt, RoundedCornerShape(8.dp))
-                                        .border(1.dp, Border, RoundedCornerShape(8.dp))
-                                        .padding(8.dp)
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    if (adminChatMessages.isEmpty()) {
+                                    Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("INSTANT UNBLOCK SCREEN", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black, letterSpacing = 0.5.sp)
+                                }
+                            } else {
+                                Button(
+                                    onClick = onBlockClick,
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                                    modifier = Modifier
+                                        .weight(1.2f)
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Lock, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("LOCK SCREEN NOW", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary, letterSpacing = 0.5.sp)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.toggleRing(device.ip, !device.ringRequested) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (device.ringRequested) AccentRed else Color(0xFF1E283C)
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(50.dp)
+                                        .border(1.dp, if (device.ringRequested) AccentRed else Color(0xFF334155), RoundedCornerShape(12.dp)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = null, tint = if (device.ringRequested) TextPrimary else AccentAmber, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(if (device.ringRequested) "STOP SIREN" else "LOUD SIREN", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                }
+                            }
+                        }
+
+                        // Voice Broadcast & Text-To-Speech Card
+                        var deviceTtsText by remember(device.ip) { mutableStateOf("") }
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(AccentAmber.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Campaign, contentDescription = "Voice Broadcast", tint = AccentAmber, modifier = Modifier.size(22.dp))
+                                    }
+                                    Column {
+                                        Text("VOICE BROADCAST (TTS)", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("Type text to read aloud on this phone in real time", color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+
+                                // Quick preset chips
+                                val targetPresets = listOf(
+                                    "Screen time is up! ⏳",
+                                    "Dinner is ready! 🍽️",
+                                    "Please call me back. 📞",
+                                    "Come here right now. 🏃",
+                                    "Time for bed. 🌙"
+                                )
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    items(targetPresets) { preset ->
+                                        Surface(
+                                            color = Color(0xFF1B2332),
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier
+                                                .border(1.dp, Color(0xFF2E3D54), RoundedCornerShape(14.dp))
+                                                .clickable { deviceTtsText = preset }
+                                        ) {
+                                            Text(
+                                                text = preset,
+                                                color = TextPrimary,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = deviceTtsText,
+                                    onValueChange = { deviceTtsText = it },
+                                    placeholder = { Text("Type announcement for ${device.name}...", color = TextSecondary, fontSize = 12.sp) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color(0xFF0F131C),
+                                        unfocusedContainerColor = Color(0xFF0F131C),
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                        focusedBorderColor = AccentAmber,
+                                        unfocusedBorderColor = Border
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 3
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (deviceTtsText.isNotBlank()) {
+                                                com.example.tts.TextToSpeechManager.speak(context, deviceTtsText)
+                                            } else {
+                                                android.widget.Toast.makeText(context, "Type text to test audio preview", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
+                                        modifier = Modifier.height(36.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("TEST AUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            if (deviceTtsText.isNotBlank()) {
+                                                val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
+                                                com.example.network.FirebaseManager.sendBroadcastAnnouncement(
+                                                    listOf(device.ip),
+                                                    deviceTtsText,
+                                                    adminName
+                                                )
+                                                android.widget.Toast.makeText(context, "📢 Voice broadcast sent to ${device.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                                deviceTtsText = ""
+                                            }
+                                        },
+                                        enabled = deviceTtsText.isNotBlank(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(36.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("SPEAK ON DEVICE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Automated Lock Schedules Shortcut Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(AccentBlue.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Schedule, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                                    }
+                                    Column {
+                                        Text("AUTOMATED SCHEDULES", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("Bedtime, study hours, and recurring rules", color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+                                Button(
+                                    onClick = onScheduleClick,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A5F)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("MANAGE", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // Tactical Communications Sub-Navigation Bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF0D121C))
+                                .border(1.dp, Color(0xFF222E42), RoundedCornerShape(12.dp))
+                                .padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Direct Chat Tab (1-on-1 private messaging, no broadcast clutter)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (selectedCommMode == 0) Color(0xFF1E3A5F) else Color.Transparent)
+                                    .clickable { selectedCommMode = 0 },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Call,
+                                        contentDescription = null,
+                                        tint = if (selectedCommMode == 0) Color(0xFF60A5FA) else TextSecondary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "DIRECT CHAT",
+                                        color = if (selectedCommMode == 0) TextPrimary else TextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+
+                            // Administrator Recon Terminal Tab (Dedicated Broadcast & Speech Terminal)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (selectedCommMode == 1) Color(0xFF064E3B) else Color.Transparent)
+                                    .clickable { selectedCommMode = 1 },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CellTower,
+                                        contentDescription = null,
+                                        tint = if (selectedCommMode == 1) Color(0xFF34D399) else TextSecondary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "RECON TERMINAL",
+                                        color = if (selectedCommMode == 1) TextPrimary else TextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    if (reconBroadcasts.isNotEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(if (selectedCommMode == 1) Color(0xFF10B981) else Color(0xFF263347), CircleShape)
+                                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "${reconBroadcasts.size}",
+                                                color = if (selectedCommMode == 1) Color.Black else TextSecondary,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        AnimatedContent(
+                            targetState = selectedCommMode,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    (slideInHorizontally { width -> width / 3 } + fadeIn(animationSpec = tween(220)))
+                                        .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut(animationSpec = tween(180)))
+                                } else {
+                                    (slideInHorizontally { width -> -width / 3 } + fadeIn(animationSpec = tween(220)))
+                                        .togetherWith(slideOutHorizontally { width -> width / 3 } + fadeOut(animationSpec = tween(180)))
+                                }
+                            },
+                            label = "comm_mode_anim"
+                        ) { mode ->
+                            if (mode == 0) {
+                                // ==================== MODE 0: DIRECT ADMINISTRATOR CHAT ====================
+                                // Strictly 1-to-1 conversation; ALL broadcast announcements are filtered out
+                                val directChatMessages = remember(adminChatMessages) {
+                                    adminChatMessages.filterNot { it.message.startsWith("[BROADCAST]") }
+                                }
+
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = "No logs. Set a text line below and transmit to the block screen.",
-                                            color = TextSecondary,
+                                            text = "DIRECT 1-ON-1 COMM CHAT",
+                                            color = Color(0xFF60A5FA),
                                             fontSize = 11.sp,
-                                            modifier = Modifier.align(Alignment.Center)
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            letterSpacing = 1.sp
                                         )
-                                    } else {
-                                        val lazyListState = rememberLazyListState()
-                                        LaunchedEffect(adminChatMessages.size) {
-                                            if (adminChatMessages.isNotEmpty()) {
-                                                lazyListState.animateScrollToItem(adminChatMessages.size - 1)
+                                        Text(
+                                            text = "BROADCASTS EXCLUDED",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 9.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp)),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp)) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(150.dp)
+                                                    .background(Color(0xFF0F131C), RoundedCornerShape(10.dp))
+                                                    .border(1.dp, Border, RoundedCornerShape(10.dp))
+                                                    .padding(8.dp)
+                                            ) {
+                                                if (directChatMessages.isEmpty()) {
+                                                    Text(
+                                                        text = "No direct chat messages yet.\nType below to message ${device.name} privately.",
+                                                        color = TextSecondary,
+                                                        fontSize = 11.sp,
+                                                        modifier = Modifier.align(Alignment.Center),
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                } else {
+                                                    val lazyListState = rememberLazyListState()
+                                                    LaunchedEffect(directChatMessages.size) {
+                                                        if (directChatMessages.isNotEmpty()) {
+                                                            lazyListState.animateScrollToItem(directChatMessages.size - 1)
+                                                        }
+                                                    }
+                                                    LazyColumn(
+                                                        state = lazyListState,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        items(directChatMessages) { msg ->
+                                                            val isMe = msg.sender == "admin"
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .background(
+                                                                            color = if (isMe) Color(0xFF1E3A5F) else Color(0xFF1E283C),
+                                                                            shape = RoundedCornerShape(
+                                                                                topStart = 12.dp,
+                                                                                topEnd = 12.dp,
+                                                                                bottomStart = if (isMe) 12.dp else 2.dp,
+                                                                                bottomEnd = if (isMe) 2.dp else 12.dp
+                                                                            )
+                                                                        )
+                                                                        .border(
+                                                                            width = 1.dp,
+                                                                            color = if (isMe) Color(0xFF2563EB).copy(alpha = 0.5f) else Border,
+                                                                            shape = RoundedCornerShape(
+                                                                                topStart = 12.dp,
+                                                                                topEnd = 12.dp,
+                                                                                bottomStart = if (isMe) 12.dp else 2.dp,
+                                                                                bottomEnd = if (isMe) 2.dp else 12.dp
+                                                                            )
+                                                                        )
+                                                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                                        .widthIn(max = 240.dp)
+                                                                ) {
+                                                                    Column {
+                                                                        Text(
+                                                                            text = if (isMe) "Admin (You)" else device.name,
+                                                                            color = if (isMe) Color(0xFF60A5FA) else TextSecondary,
+                                                                            fontSize = 9.sp,
+                                                                            fontWeight = FontWeight.Bold
+                                                                        )
+                                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                                        Text(
+                                                                            text = msg.message,
+                                                                            color = TextPrimary,
+                                                                            fontSize = 12.sp
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(10.dp))
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = adminChatInputText,
+                                                    onValueChange = { adminChatInputText = it },
+                                                    placeholder = { Text("Direct message to ${device.name}...", color = TextSecondary, fontSize = 12.sp) },
+                                                    singleLine = true,
+                                                    textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 12.sp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = AccentBlue,
+                                                        unfocusedBorderColor = Border,
+                                                        focusedContainerColor = Color(0xFF0F131C),
+                                                        unfocusedContainerColor = Color(0xFF0F131C)
+                                                    ),
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(10.dp)
+                                                )
+
+                                                IconButton(
+                                                    onClick = {
+                                                        if (adminChatInputText.trim().isNotEmpty()) {
+                                                            viewModel.sendAdminMessage(device.ip, adminChatInputText.trim())
+                                                            adminChatInputText = ""
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(42.dp)
+                                                        .background(AccentBlue, CircleShape)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Send,
+                                                        contentDescription = "Send Message",
+                                                        tint = TextPrimary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
                                             }
                                         }
-                                        LazyColumn(
-                                            state = lazyListState,
-                                            modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            items(adminChatMessages) { msg ->
-                                                val isMe = msg.sender == "admin"
+                                    }
+                                }
+                            } else {
+                                // ==================== MODE 1: ADMINISTRATOR RECON BROADCAST TERMINAL ====================
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    // Terminal Header Card with Audio Visualizer
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B141E)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            // Status line with Equalizer
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Box(
                                                         modifier = Modifier
-                                                            .background(
-                                                                color = if (isMe) AccentBlue.copy(alpha = 0.8f) else SurfaceAlt,
-                                                                shape = RoundedCornerShape(
-                                                                    topStart = 14.dp,
-                                                                    topEnd = 14.dp,
-                                                                    bottomStart = if (isMe) 14.dp else 2.dp,
-                                                                    bottomEnd = if (isMe) 2.dp else 14.dp
-                                                                )
+                                                            .size(10.dp)
+                                                            .background(Color(0xFF10B981), CircleShape)
+                                                    )
+                                                    Column {
+                                                        Text(
+                                                            text = "RECON BROADCAST TERMINAL",
+                                                            color = Color(0xFF34D399),
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontFamily = FontFamily.Monospace,
+                                                            letterSpacing = 1.sp
+                                                        )
+                                                        Text(
+                                                            text = "ENCRYPTED TTS UPLINK // CH-433.92 MHz",
+                                                            color = Color(0xFF6EE7B7),
+                                                            fontSize = 9.sp,
+                                                            fontFamily = FontFamily.Monospace
+                                                        )
+                                                    }
+                                                }
+
+                                                // Dynamic Audio Equalizer Animation
+                                                AudioEqualizerVisualizer(
+                                                    color = Color(0xFF34D399)
+                                                )
+                                            }
+
+                                            // Tactical Quick Directives Chips
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    text = "QUICK TACTICAL DIRECTIVES",
+                                                    color = Color(0xFF94A3B8),
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                                val reconPresets = listOf(
+                                                    "🚨 EMERGENCY LOCKDOWN INITIATED",
+                                                    "🛌 BEDTIME SCHEDULE ACTIVE",
+                                                    "📚 STUDY TIME: RESTRICTING APPS",
+                                                    "⚠️ RETURN HOME IMMEDIATELY",
+                                                    "🔕 SILENCE NOTIFICATIONS"
+                                                )
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState()),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    reconPresets.forEach { preset ->
+                                                        Surface(
+                                                            color = Color(0xFF13232C),
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            modifier = Modifier
+                                                                .border(1.dp, Color(0xFF1F4448), RoundedCornerShape(8.dp))
+                                                                .clickable { reconTerminalInputText = preset }
+                                                        ) {
+                                                            Text(
+                                                                text = preset,
+                                                                color = Color(0xFFE2E8F0),
+                                                                fontSize = 10.sp,
+                                                                fontFamily = FontFamily.Monospace,
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                             )
-                                                            .border(
-                                                                width = 1.dp,
-                                                                color = if (isMe) AccentBlue else Border,
-                                                                shape = RoundedCornerShape(
-                                                                    topStart = 14.dp,
-                                                                    topEnd = 14.dp,
-                                                                    bottomStart = if (isMe) 14.dp else 2.dp,
-                                                                    bottomEnd = if (isMe) 2.dp else 14.dp
-                                                                )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Terminal Input Box
+                                            OutlinedTextField(
+                                                value = reconTerminalInputText,
+                                                onValueChange = { reconTerminalInputText = it },
+                                                placeholder = {
+                                                    Text(
+                                                        text = "Enter recon broadcast speech directive...",
+                                                        color = Color(0xFF64748B),
+                                                        fontSize = 12.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                },
+                                                leadingIcon = {
+                                                    Text(
+                                                        text = "TX>",
+                                                        color = Color(0xFF34D399),
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        modifier = Modifier.padding(start = 12.dp, end = 4.dp)
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = Color(0xFF090E16),
+                                                    unfocusedContainerColor = Color(0xFF090E16),
+                                                    focusedTextColor = Color(0xFFECFDF5),
+                                                    unfocusedTextColor = Color(0xFFECFDF5),
+                                                    focusedBorderColor = Color(0xFF10B981),
+                                                    unfocusedBorderColor = Color(0xFF1E3A3A)
+                                                ),
+                                                textStyle = LocalTextStyle.current.copy(
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 12.sp
+                                                ),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                maxLines = 3
+                                            )
+
+                                            // Action Buttons: Audio Test + Transmit
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        if (reconTerminalInputText.isNotBlank()) {
+                                                            com.example.tts.TextToSpeechManager.speak(context, reconTerminalInputText)
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "Type directive to preview audio", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF34D399)),
+                                                    modifier = Modifier.height(36.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                                ) {
+                                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("PREVIEW TTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                                }
+
+                                                Spacer(modifier = Modifier.width(8.dp))
+
+                                                Button(
+                                                    onClick = {
+                                                        if (reconTerminalInputText.isNotBlank()) {
+                                                            val adminName = StateManager.adminName.value.ifEmpty { "Admin" }
+                                                            com.example.network.FirebaseManager.sendBroadcastAnnouncement(
+                                                                listOf(device.ip),
+                                                                reconTerminalInputText,
+                                                                adminName
                                                             )
-                                                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                                                            .widthIn(max = 200.dp)
+                                                            android.widget.Toast.makeText(context, "📡 Recon broadcast dispatched to ${device.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                                            reconTerminalInputText = ""
+                                                        }
+                                                    },
+                                                    enabled = reconTerminalInputText.isNotBlank(),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF10B981),
+                                                        disabledContainerColor = Color(0xFF1E2D2B)
+                                                    ),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.height(36.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Campaign, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "TRANSMIT BROADCAST",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (reconTerminalInputText.isNotBlank()) Color.Black else Color(0xFF64748B),
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Recon Broadcasts Stream Feed Card
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1522)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, Color(0xFF1F2B3E), RoundedCornerShape(16.dp)),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "TRANSMISSION FEED",
+                                                        color = Color(0xFF94A3B8),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                    Text(
+                                                        text = "(${reconBroadcasts.size})",
+                                                        color = Color(0xFF34D399),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+
+                                                if (reconBroadcasts.isNotEmpty()) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            viewModel.clearReconBroadcasts(device.ip)
+                                                            android.widget.Toast.makeText(context, "Recon terminal history cleared", android.widget.Toast.LENGTH_SHORT).show()
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                                     ) {
-                                                        Column {
-                                                            Text(
-                                                                text = if (isMe) "Admin (You)" else "User",
-                                                                color = if (isMe) TextPrimary.copy(alpha = 0.8f) else TextSecondary,
-                                                                fontSize = 8.sp,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                            Spacer(modifier = Modifier.height(2.dp))
-                                                            Text(
-                                                                text = msg.message,
-                                                                color = TextPrimary,
-                                                                fontSize = 11.sp
-                                                            )
+                                                        Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text("CLEAR FEED", color = Color(0xFFF87171), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                                    }
+                                                }
+                                            }
+
+                                            if (reconBroadcasts.isEmpty()) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(110.dp)
+                                                        .background(Color(0xFF0A0F18), RoundedCornerShape(10.dp))
+                                                        .border(1.dp, Color(0xFF1A2636), RoundedCornerShape(10.dp))
+                                                        .padding(12.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Icon(Icons.Default.CellTower, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(22.dp))
+                                                        Text(
+                                                            text = "TERMINAL STANDBY // NO BROADCASTS TRANSMITTED",
+                                                            color = Color(0xFF64748B),
+                                                            fontSize = 10.sp,
+                                                            fontFamily = FontFamily.Monospace,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                        Text(
+                                                            text = "Use the console above to transmit priority audio broadcasts.",
+                                                            color = Color(0xFF475569),
+                                                            fontSize = 9.sp,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(180.dp)
+                                                        .background(Color(0xFF090E17), RoundedCornerShape(10.dp))
+                                                        .border(1.dp, Color(0xFF1E2D40), RoundedCornerShape(10.dp))
+                                                        .padding(8.dp)
+                                                ) {
+                                                    LazyColumn(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        items(reconBroadcasts) { b ->
+                                                            val isAck = b.status == "ACKNOWLEDGED"
+                                                            val date = java.util.Date(b.timestamp)
+                                                            val timeStr = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(date)
+
+                                                            Card(
+                                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF101726)),
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .border(
+                                                                        1.dp,
+                                                                        if (isAck) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFFF59E0B).copy(alpha = 0.4f),
+                                                                        RoundedCornerShape(8.dp)
+                                                                    )
+                                                            ) {
+                                                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
+                                                                        Row(
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                                        ) {
+                                                                            Text(
+                                                                                text = "[$timeStr]",
+                                                                                color = Color(0xFF64748B),
+                                                                                fontSize = 10.sp,
+                                                                                fontFamily = FontFamily.Monospace,
+                                                                                fontWeight = FontWeight.Bold
+                                                                            )
+                                                                            Text(
+                                                                                text = "BY ${b.sender.uppercase()}",
+                                                                                color = Color(0xFF94A3B8),
+                                                                                fontSize = 10.sp,
+                                                                                fontFamily = FontFamily.Monospace
+                                                                            )
+                                                                        }
+
+                                                                        // Telemetry status pill
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .background(
+                                                                                    if (isAck) Color(0xFF064E3B) else Color(0xFF451A03),
+                                                                                    RoundedCornerShape(4.dp)
+                                                                                )
+                                                                                .border(
+                                                                                    1.dp,
+                                                                                    if (isAck) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                                                                    RoundedCornerShape(4.dp)
+                                                                                )
+                                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                        ) {
+                                                                            Row(
+                                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                                            ) {
+                                                                                Icon(
+                                                                                    imageVector = if (isAck) Icons.Default.CheckCircle else Icons.Default.Campaign,
+                                                                                    contentDescription = null,
+                                                                                    tint = if (isAck) Color(0xFF34D399) else Color(0xFFFBBF24),
+                                                                                    modifier = Modifier.size(10.dp)
+                                                                                )
+                                                                                Text(
+                                                                                    text = if (isAck) "ACKNOWLEDGED" else "TRANSMITTED",
+                                                                                    color = if (isAck) Color(0xFF34D399) else Color(0xFFFBBF24),
+                                                                                    fontSize = 8.sp,
+                                                                                    fontWeight = FontWeight.Bold,
+                                                                                    fontFamily = FontFamily.Monospace
+                                                                                )
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    Text(
+                                                                        text = b.message,
+                                                                        color = Color.White,
+                                                                        fontSize = 12.sp,
+                                                                        fontFamily = FontFamily.Monospace
+                                                                    )
+
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.End,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
+                                                                        TextButton(
+                                                                            onClick = {
+                                                                                com.example.tts.TextToSpeechManager.speak(context, b.message)
+                                                                            },
+                                                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                                                        ) {
+                                                                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(12.dp))
+                                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                                            Text("LISTEN", color = Color(0xFF38BDF8), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                                                                        }
+
+                                                                        Spacer(modifier = Modifier.width(4.dp))
+
+                                                                        TextButton(
+                                                                            onClick = {
+                                                                                reconTerminalInputText = b.message
+                                                                            },
+                                                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                                                        ) {
+                                                                            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(12.dp))
+                                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                                            Text("RE-DISPATCH", color = Color(0xFF34D399), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -2157,259 +3848,341 @@ fun DeviceControlsScreen(
                                         }
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = adminChatInputText,
-                                        onValueChange = { adminChatInputText = it },
-                                        placeholder = { Text("Type reply...", color = TextSecondary, fontSize = 11.sp) },
-                                        singleLine = true,
-                                        textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = AccentBlue,
-                                            unfocusedBorderColor = Border
-                                        ),
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-
-                                    IconButton(
-                                        onClick = {
-                                            if (adminChatInputText.trim().isNotEmpty()) {
-                                                viewModel.sendAdminMessage(device.ip, adminChatInputText.trim())
-                                                adminChatInputText = ""
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .background(AccentBlue, CircleShape)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Send,
-                                            contentDescription = "Send Message",
-                                            tint = TextPrimary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
-                }
 
-                2 -> {
-                    // TAB 3: Lock Studio
-                    Text(
-                        text = "LOCK SCREEN DESIGNER STUDIO",
-                        color = AccentBlue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text("Lock Theme", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                listOf("slate", "cyberpunk", "stealth").forEach { t ->
-                                    val isSel = activeTheme == t
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .background(
-                                                if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                                                RoundedCornerShape(8.dp)
-                                            )
-                                            .border(
-                                                width = 1.dp,
-                                                color = if (isSel) AccentBlue else Border,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .clickable { activeTheme = t }
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(t.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Warning Icon", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                listOf("lock", "biohazard", "warning", "hourglass").forEach { iName ->
-                                    val isSel = activeIcon == iName
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .background(
-                                                if (isSel) AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                                                RoundedCornerShape(8.dp)
-                                            )
-                                            .border(
-                                                width = 1.dp,
-                                                color = if (isSel) AccentBlue else Border,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .clickable { activeIcon = iName }
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(iName.uppercase(), color = if (isSel) AccentBlue else TextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Wallpaper Backdrop (Abstract URL)", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            OutlinedTextField(
-                                value = activeWallpaper,
-                                onValueChange = { activeWallpaper = it },
-                                placeholder = { Text("https://example.com/wallpaper.jpg", fontSize = 11.sp, color = TextSecondary) },
-                                singleLine = true,
-                                textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AccentBlue,
-                                    unfocusedBorderColor = Border
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.updateLockStyle(device.ip, activeTheme, activeWallpaper, activeIcon)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(42.dp)
-                            ) {
-                                Text("APPLY VISUAL STYLE", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                3 -> {
-                    // TAB 4: Audit Logs
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    2 -> {
+                        // ==================== TAB 2: LOCK STUDIO ====================
                         Text(
-                            text = "ADMIN COMMAND AUDIT LOGS",
+                            text = "LOCK SCREEN DESIGNER STUDIO",
                             color = AccentBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
-                        TextButton(
-                            onClick = {
-                                viewModel.clearLogs(device.ip)
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Clear Logs",
-                                tint = AccentRed,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("CLEAR LOGS", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
 
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Border, RoundedCornerShape(12.dp)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            if (operationLogs.isEmpty()) {
-                                Text(
-                                    text = "No operational logs captured yet.",
-                                    color = TextSecondary,
-                                    fontSize = 11.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 24.dp)
+                        // 1. Theme Picker Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("Select Theme Aesthetic", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                val themes = listOf("slate", "cyberpunk", "stealth", "matrix", "crimson")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    themes.forEach { t ->
+                                        val isSel = activeTheme == t
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isSel) Color(0xFF1E3A5F) else Color(0xFF1B2332),
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = if (isSel) Color(0xFF3B82F6) else Border,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                .clickable { activeTheme = t }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = t.uppercase(),
+                                                color = if (isSel) Color(0xFF60A5FA) else TextSecondary,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Warning Icon Glyph", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                val icons = listOf(
+                                    "lock" to Icons.Default.Lock,
+                                    "biohazard" to Icons.Default.Warning,
+                                    "warning" to Icons.Default.Warning,
+                                    "hourglass" to Icons.Default.Schedule,
+                                    "shield" to Icons.Default.Shield
                                 )
-                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    icons.forEach { (iName, iVector) ->
+                                        val isSel = activeIcon == iName
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isSel) Color(0xFF1E3A5F) else Color(0xFF1B2332),
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = if (isSel) Color(0xFF3B82F6) else Border,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                .clickable { activeIcon = iName }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = iVector,
+                                                contentDescription = iName,
+                                                tint = if (isSel) Color(0xFF60A5FA) else TextSecondary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Wallpaper Backdrop Presets", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                val wallpaperPresets = listOf(
+                                    "Default Dark" to "",
+                                    "Obsidian Void" to "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800",
+                                    "Neon Matrix" to "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800",
+                                    "Crimson Pulse" to "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=800"
+                                )
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    items(wallpaperPresets) { (pName, pUrl) ->
+                                        Surface(
+                                            color = if (activeWallpaper == pUrl) Color(0xFF1E3A5F) else Color(0xFF1B2332),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier
+                                                .border(
+                                                    1.dp,
+                                                    if (activeWallpaper == pUrl) Color(0xFF3B82F6) else Border,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable { activeWallpaper = pUrl }
+                                        ) {
+                                            Text(
+                                                text = pName,
+                                                color = if (activeWallpaper == pUrl) Color(0xFF60A5FA) else TextPrimary,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = activeWallpaper,
+                                    onValueChange = { activeWallpaper = it },
+                                    placeholder = { Text("Custom image URL (https://...)", fontSize = 11.sp, color = TextSecondary) },
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(color = TextPrimary, fontSize = 11.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = AccentBlue,
+                                        unfocusedBorderColor = Border,
+                                        focusedContainerColor = Color(0xFF0F131C),
+                                        unfocusedContainerColor = Color(0xFF0F131C)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Mini Phone Mockup Preview Box
+                                Text("Real-Time Lock Mockup Preview", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(200.dp)
+                                        .height(130.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            when (activeTheme) {
+                                                "cyberpunk" -> Color(0xFF120B24)
+                                                "matrix" -> Color(0xFF08180E)
+                                                "crimson" -> Color(0xFF240A0F)
+                                                "stealth" -> Color(0xFF05070A)
+                                                else -> Color(0xFF0F131C)
+                                            }
+                                        )
+                                        .border(
+                                            1.dp,
+                                            when (activeTheme) {
+                                                "cyberpunk" -> AccentPurple
+                                                "matrix" -> AccentGreen
+                                                "crimson" -> AccentRed
+                                                else -> AccentBlue
+                                            }.copy(alpha = 0.5f),
+                                            RoundedCornerShape(12.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        items(operationLogs) { item ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(6.dp)
-                                                        .background(
-                                                            when (item.action) {
-                                                                "LOCK", "GEOFENCE_VIOLATION" -> AccentRed
-                                                                "UNLOCK" -> AccentGreen
-                                                                else -> AccentBlue
-                                                            },
-                                                            CircleShape
+                                        Icon(
+                                            imageVector = when (activeIcon) {
+                                                "biohazard", "warning" -> Icons.Default.Warning
+                                                "hourglass" -> Icons.Default.Schedule
+                                                "shield" -> Icons.Default.Shield
+                                                else -> Icons.Default.Lock
+                                            },
+                                            contentDescription = null,
+                                            tint = when (activeTheme) {
+                                                "cyberpunk" -> AccentPurple
+                                                "matrix" -> AccentGreen
+                                                "crimson" -> AccentRed
+                                                else -> AccentBlue
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        Text(
+                                            text = "SCREEN RESTRICTED BY ADMIN",
+                                            color = TextPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text(
+                                            text = "Theme: ${activeTheme.uppercase()} • Icon: ${activeIcon.uppercase()}",
+                                            color = TextSecondary,
+                                            fontSize = 9.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.updateLockStyle(device.ip, activeTheme, activeWallpaper, activeIcon)
+                                        android.widget.Toast.makeText(context, "Lock screen style applied to ${device.name}", android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                ) {
+                                    Text("APPLY VISUAL STYLE TO DEVICE", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    3 -> {
+                        // ==================== TAB 3: AUDIT LOGS ====================
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "ADMIN COMMAND AUDIT LOGS",
+                                color = AccentBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp
+                            )
+                            TextButton(
+                                onClick = {
+                                    viewModel.clearLogs(device.ip)
+                                    android.widget.Toast.makeText(context, "Audit logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Clear Logs",
+                                    tint = AccentRed,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("CLEAR LOGS", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF141A26)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0xFF28354D), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                if (operationLogs.isEmpty()) {
+                                    Text(
+                                        text = "No operational logs captured yet for this device.",
+                                        color = TextSecondary,
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 32.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(240.dp)
+                                    ) {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            items(operationLogs) { item ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(8.dp)
+                                                            .background(
+                                                                when (item.action) {
+                                                                    "LOCK", "GEOFENCE_VIOLATION" -> AccentRed
+                                                                    "UNLOCK" -> AccentGreen
+                                                                    "SCREEN_START", "CAMERA_START" -> AccentPurple
+                                                                    else -> Color(0xFF60A5FA)
+                                                                },
+                                                                CircleShape
+                                                            )
+                                                            .align(Alignment.CenterVertically)
+                                                    )
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = "${item.action} • ${item.details}",
+                                                            color = TextPrimary,
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Medium
                                                         )
-                                                        .align(Alignment.CenterVertically)
-                                                )
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = "${item.action} • ${item.details}",
-                                                        color = TextPrimary,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Medium
-                                                    )
-                                                    val date = java.util.Date(item.timestamp)
-                                                    val timeStr = java.text.SimpleDateFormat(
-                                                        "hh:mm a",
-                                                        java.util.Locale.getDefault()
-                                                    ).format(date)
-                                                    Text(
-                                                        text = "Timestamp: $timeStr",
-                                                        color = TextSecondary,
-                                                        fontSize = 9.sp,
-                                                        fontFamily = FontFamily.Monospace
-                                                    )
+                                                        val date = java.util.Date(item.timestamp)
+                                                        val timeStr = java.text.SimpleDateFormat(
+                                                            "MMM d, hh:mm a",
+                                                            java.util.Locale.getDefault()
+                                                        ).format(date)
+                                                        Text(
+                                                            text = timeStr,
+                                                            color = TextSecondary,
+                                                            fontSize = 10.sp,
+                                                            fontFamily = FontFamily.Monospace
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -2419,64 +4192,66 @@ fun DeviceControlsScreen(
                         }
                     }
                 }
-            }
 
-            // Danger Zone / Unpair Device at the bottom
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, AccentRed.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                // Danger Zone / Unpair Device at the bottom
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1418)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, AccentRed.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text(
-                        text = "DANGER ZONE",
-                        color = AccentRed,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Unpair and permanently remove this device from monitoring. The client device will cease telemetry, background sync, and security locks.",
-                        color = TextSecondary,
-                        fontSize = 11.sp
-                    )
-                    OutlinedButton(
-                        onClick = { showRemoveDialog = true },
-                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentRed.copy(alpha = 0.5f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = AccentRed.copy(alpha = 0.08f),
-                            contentColor = AccentRed
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp)
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Unpair Device",
-                            tint = AccentRed,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "UNPAIR DEVICE",
+                            text = "DANGER ZONE",
+                            color = AccentRed,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            color = AccentRed,
-                            fontSize = 11.sp
+                            letterSpacing = 1.sp
                         )
+                        Text(
+                            text = "Unpair and permanently remove this device from remote monitoring. The client device will cease telemetry, background sync, and security locks.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                        OutlinedButton(
+                            onClick = { showRemoveDialog = true },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentRed.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = AccentRed.copy(alpha = 0.1f),
+                                contentColor = AccentRed
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Unpair Device",
+                                tint = AccentRed,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "UNPAIR & REMOVE DEVICE",
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = AccentRed,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(32.dp))
             }
-        }
         }
     }
 }
@@ -2561,19 +4336,50 @@ fun BlockModal(
         else -> -1L
     }
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         containerColor = Surface,
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth(0.95f)
+            .widthIn(max = 480.dp)
+            .heightIn(max = if (isLandscape) 340.dp else 660.dp)
+            .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(24.dp)),
         title = {
-            Text(
-                text = "LOCK SCREEN NOW",
-                color = AccentRed,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                letterSpacing = 1.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(AccentRed.copy(alpha = 0.15f), CircleShape)
+                        .border(1.dp, GlassRedBorderBrush, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = AccentRed,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text = "LOCK SCREEN NOW",
+                    color = AccentRed,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         },
         text = {
             Column(
@@ -2851,24 +4657,27 @@ fun BlockModal(
         confirmButton = {
             Button(
                 colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(100.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(48.dp)
+                    .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(100.dp)),
                 onClick = { onSendBlock(message, password, timerSeconds, selectedImageBase64) }
             ) {
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
-                    tint = TextPrimary,
+                    tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "🔒 LOCK SCREEN NOW",
-                    color = TextPrimary,
+                    "LOCK SCREEN NOW",
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.sp
                 )
             }
         },
@@ -2876,16 +4685,12 @@ fun BlockModal(
             TextButton(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(44.dp),
                 onClick = onDismiss
             ) {
-                Text("CANCEL", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                Text("CANCEL", color = TextSecondary, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
-        },
-        modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .widthIn(max = 500.dp)
-            .border(1.dp, Border, RoundedCornerShape(20.dp))
+        }
     )
 }
 
@@ -2903,14 +4708,13 @@ fun AdminBottomBar(
         contentAlignment = Alignment.Center
     ) {
         NavigationBar(
-            containerColor = Surface,
+            containerColor = Color(0xFF191F2C),
             tonalElevation = 0.dp,
             modifier = Modifier
-                .widthIn(max = 500.dp)
+                .widthIn(max = 420.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(LiquidGlassGlareGradient)
-                .border(width = 1.2.dp, brush = LiquidGlassChromaticBorder, shape = RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(100.dp))
+                .border(width = 1.dp, color = Color(0xFF2B364A), shape = RoundedCornerShape(100.dp))
         ) {
             NavigationBarItem(
                 selected = currentScreen == "dashboard",
@@ -2923,15 +4727,17 @@ fun AdminBottomBar(
                 },
                 label = {
                     Text(
-                        "Control Panel",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
+                        "Control",
+                        fontSize = 11.5.sp,
+                        fontWeight = if (currentScreen == "dashboard") FontWeight.Bold else FontWeight.Medium
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = AccentBlue,
-                    unselectedIconColor = TextSecondary,
-                    indicatorColor = AccentBlue.copy(alpha = 0.15f)
+                    selectedIconColor = Color.White,
+                    selectedTextColor = Color.White,
+                    unselectedIconColor = Color(0xFF8896AB),
+                    unselectedTextColor = Color(0xFF8896AB),
+                    indicatorColor = Color(0xFF1E3A5F)
                 )
             )
 
@@ -2940,21 +4746,23 @@ fun AdminBottomBar(
                 onClick = onNavigateToSettings,
                 icon = {
                     Icon(
-                        imageVector = Icons.Default.Settings,
+                        imageVector = Icons.Default.Build,
                         contentDescription = "Settings"
                     )
                 },
                 label = {
                     Text(
                         "Settings",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
+                        fontSize = 11.5.sp,
+                        fontWeight = if (currentScreen == "settings") FontWeight.Bold else FontWeight.Medium
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = AccentBlue,
-                    unselectedIconColor = TextSecondary,
-                    indicatorColor = AccentBlue.copy(alpha = 0.15f)
+                    selectedIconColor = Color.White,
+                    selectedTextColor = Color.White,
+                    unselectedIconColor = Color(0xFF8896AB),
+                    unselectedTextColor = Color(0xFF8896AB),
+                    indicatorColor = Color(0xFF1E3A5F)
                 )
             )
         }
@@ -3061,25 +4869,39 @@ fun CameraStreamModal(
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        containerColor = Surface,
+        shape = RoundedCornerShape(24.dp),
         modifier = Modifier
+            .fillMaxWidth(0.95f)
             .widthIn(max = 500.dp)
-            .fillMaxWidth()
-            .padding(16.dp),
+            .heightIn(max = if (isLandscape) 360.dp else 680.dp)
+            .border(1.dp, GlassGreenBorderBrush, RoundedCornerShape(24.dp)),
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                shape = RoundedCornerShape(100.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
+                    .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(100.dp))
             ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "DISCONNECT FEED",
-                    color = Color.Black,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
@@ -3093,7 +4915,10 @@ fun CameraStreamModal(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Videocam,
                         contentDescription = "Live Camera Indicator",
@@ -3104,10 +4929,12 @@ fun CameraStreamModal(
                     Text(
                         text = if (device.cameraLens == "back") "LIVE BACK CAMERA" else "LIVE FRONT CAMERA",
                         color = TextPrimary,
-                        fontSize = 14.sp,
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 
@@ -3384,9 +5211,7 @@ fun CameraStreamModal(
                     }
                 }
             }
-        },
-        containerColor = Color(0xFF000000),
-        shape = RoundedCornerShape(16.dp)
+        }
     )
 }
 
@@ -3437,32 +5262,39 @@ fun ScreenStreamModal(
         label = "pulse_alpha"
     )
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Surface,
         modifier = Modifier
             .fillMaxWidth(0.95f)
             .widthIn(max = 520.dp)
-            .border(1.dp, Border, RoundedCornerShape(20.dp)),
+            .heightIn(max = if (isLandscape) 360.dp else 680.dp)
+            .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(24.dp)),
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
-                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                shape = RoundedCornerShape(100.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
+                    .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(100.dp))
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = null,
-                    tint = TextPrimary,
+                    tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "CLOSE LIVE SCREEN FEED",
-                    color = TextPrimary,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
@@ -3476,7 +5308,10 @@ fun ScreenStreamModal(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Icon(
                         imageVector = Icons.Default.ScreenShare,
                         contentDescription = "Live Screen Indicator",
@@ -3484,20 +5319,24 @@ fun ScreenStreamModal(
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = "LIVE REMOTE SCREEN",
                             color = TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "${device.name} • ${device.ip}",
                             color = TextSecondary,
                             fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -3713,10 +5552,8 @@ fun ScreenStreamModal(
                 }
             }
         }
-        },
-        containerColor = Color(0xFF000000),
-        shape = RoundedCornerShape(20.dp)
-    )
+    }
+)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3734,6 +5571,8 @@ fun ScheduleManagerModal(
     }
 
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val schedules by StateManager.schedules.collectAsState()
     val devices by viewModel.devices.collectAsState(initial = emptyList())
 
@@ -3884,7 +5723,8 @@ fun ScheduleManagerModal(
         modifier = Modifier
             .fillMaxWidth(0.95f)
             .widthIn(max = 520.dp)
-            .border(1.dp, Border, RoundedCornerShape(24.dp)),
+            .heightIn(max = if (isLandscape) 340.dp else 680.dp)
+            .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
         containerColor = Surface,
         title = {
@@ -3895,7 +5735,8 @@ fun ScheduleManagerModal(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CalendarToday,
@@ -3905,10 +5746,12 @@ fun ScheduleManagerModal(
                     Text(
                         text = if (isEditorOpen) (if (editingScheduleId != null) "EDIT SCHEDULE" else "NEW SCHEDULE") else "LOCKDOWN SCHEDULER",
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 IconButton(onClick = onDismiss) {
@@ -3920,7 +5763,7 @@ fun ScheduleManagerModal(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp),
+                    .heightIn(max = if (isLandscape) 260.dp else 520.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (isEditorOpen) {
@@ -3966,23 +5809,25 @@ fun ScheduleManagerModal(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                 Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     AssistChip(
                                         onClick = { applyPreset("bedtime") },
-                                        label = { Text("Bedtime (21-07)", fontSize = 10.sp) },
+                                        label = { Text("Bedtime (21-07)", fontSize = 10.sp, maxLines = 1) },
                                         colors = AssistChipDefaults.assistChipColors(containerColor = Surface)
                                     )
                                     AssistChip(
                                         onClick = { applyPreset("school") },
-                                        label = { Text("School (08-15)", fontSize = 10.sp) },
+                                        label = { Text("School (08-15)", fontSize = 10.sp, maxLines = 1) },
                                         colors = AssistChipDefaults.assistChipColors(containerColor = Surface)
                                     )
                                     AssistChip(
                                         onClick = { applyPreset("dinner") },
-                                        label = { Text("Dinner (18-20)", fontSize = 10.sp) },
+                                        label = { Text("Dinner (18-20)", fontSize = 10.sp, maxLines = 1) },
                                         colors = AssistChipDefaults.assistChipColors(containerColor = Surface)
                                     )
                                 }
@@ -4014,7 +5859,9 @@ fun ScheduleManagerModal(
 
                                 // Device Chips
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     val quickChips = listOf("All Devices") + devices.map { it.name }
@@ -4022,7 +5869,7 @@ fun ScheduleManagerModal(
                                         val isSelected = targetDeviceName.equals(name, ignoreCase = true)
                                         AssistChip(
                                             onClick = { targetDeviceName = name },
-                                            label = { Text(name, fontSize = 10.sp) },
+                                            label = { Text(name, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                             colors = AssistChipDefaults.assistChipColors(
                                                 labelColor = if (isSelected) AccentBlue else TextPrimary,
                                                 containerColor = if (isSelected) AccentBlue.copy(alpha = 0.15f) else Surface
@@ -4532,7 +6379,9 @@ fun DevicePairingAndManagerModal(
         }
     }
 
-    var selectedTab by remember { mutableStateOf("scan") } // "scan", "my_qr", "local"
+    var selectedTab by remember { mutableStateOf("scan") } // "scan", "my_qr", "paired", "local"
+    val devices by viewModel.devices.collectAsState()
+    var showClearAllConfirm by remember { mutableStateOf(false) }
     val manualIps by StateManager.manualIps.collectAsState()
     var inputIp by remember { mutableStateOf("") }
     var inputError by remember { mutableStateOf<String?>(null) }
@@ -4568,13 +6417,17 @@ fun DevicePairingAndManagerModal(
         hasCameraPermission = granted
     }
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier
             .fillMaxWidth(0.95f)
             .widthIn(max = 480.dp)
-            .border(1.dp, Border, RoundedCornerShape(24.dp)),
+            .heightIn(max = if (isLandscape) 340.dp else 680.dp)
+            .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
         containerColor = Surface,
         title = {
@@ -4585,94 +6438,162 @@ fun DevicePairingAndManagerModal(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Link,
-                        contentDescription = null,
-                        tint = AccentBlue
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(SurfaceAlt, CircleShape)
+                            .border(1.dp, GlassAccentBorderBrush, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Link,
+                            contentDescription = null,
+                            tint = AccentCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Text(
-                        text = "PAIR GUARDLINK DEVICE",
+                        text = "PAIR COMPANION DEVICE",
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Tab Selection Row
+                // Liquid Glass Cyber Pill Tab Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(SurfaceAlt, RoundedCornerShape(12.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        .background(SurfaceAlt, RoundedCornerShape(100.dp))
+                        .border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
+                        .padding(4.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val tabModifierScan = Modifier
-                        .weight(1f)
-                        .background(
-                            if (selectedTab == "scan") AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable { selectedTab = "scan"; isScanningQr = false }
-                        .padding(vertical = 10.dp)
-
-                    Box(modifier = tabModifierScan, contentAlignment = Alignment.Center) {
+                    val isScan = selectedTab == "scan"
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(if (isScan) AccentBlue else Color.Transparent)
+                            .then(
+                                if (isScan) Modifier.border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTab = "scan"; isScanningQr = false }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            text = "SCAN / CODE",
-                            color = if (selectedTab == "scan") AccentBlue else TextSecondary,
-                            fontWeight = FontWeight.Bold,
+                            text = "Code/Scan",
+                            color = if (isScan) Color.White else TextSecondary,
+                            fontWeight = if (isScan) FontWeight.Bold else FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
 
-                    val tabModifierMyQr = Modifier
-                        .weight(1f)
-                        .background(
-                            if (selectedTab == "my_qr") AccentAmber.copy(alpha = 0.2f) else Color.Transparent,
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable { selectedTab = "my_qr"; isScanningQr = false }
-                        .padding(vertical = 10.dp)
-
-                    Box(modifier = tabModifierMyQr, contentAlignment = Alignment.Center) {
+                    val isMyQr = selectedTab == "my_qr"
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(if (isMyQr) AccentAmber.copy(alpha = 0.25f) else Color.Transparent)
+                            .then(
+                                if (isMyQr) Modifier.border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(100.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTab = "my_qr"; isScanningQr = false }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            text = "MY QR / CODE",
-                            color = if (selectedTab == "my_qr") AccentAmber else TextSecondary,
-                            fontWeight = FontWeight.Bold,
+                            text = "My QR",
+                            color = if (isMyQr) AccentAmber else TextSecondary,
+                            fontWeight = if (isMyQr) FontWeight.Bold else FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
 
-                    val tabModifierLocal = Modifier
-                        .weight(0.9f)
-                        .background(
-                            if (selectedTab == "local") AccentBlue.copy(alpha = 0.2f) else Color.Transparent,
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable { selectedTab = "local" }
-                        .padding(vertical = 10.dp)
-
-                    Box(modifier = tabModifierLocal, contentAlignment = Alignment.Center) {
+                    val isPaired = selectedTab == "paired"
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(if (isPaired) AccentGreen.copy(alpha = 0.25f) else Color.Transparent)
+                            .then(
+                                if (isPaired) Modifier.border(1.dp, AccentGreen.copy(alpha = 0.6f), RoundedCornerShape(100.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTab = "paired"; isScanningQr = false }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            text = "LOCAL IP",
-                            color = if (selectedTab == "local") AccentBlue else TextSecondary,
-                            fontWeight = FontWeight.Bold,
+                            text = "Linked (${devices.size})",
+                            color = if (isPaired) AccentGreen else TextSecondary,
+                            fontWeight = if (isPaired) FontWeight.Bold else FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    val isLocal = selectedTab == "local"
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .background(if (isLocal) AccentBlue else Color.Transparent)
+                            .then(
+                                if (isLocal) Modifier.border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTab = "local" }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "IP",
+                            color = if (isLocal) Color.White else TextSecondary,
+                            fontWeight = if (isLocal) FontWeight.Bold else FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -4686,7 +6607,7 @@ fun DevicePairingAndManagerModal(
                         ) {
                             Text(
                                 "POINT CAMERA AT TARGET QR CODE",
-                                color = AccentAmber,
+                                color = Color(0xFFFBBF24),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
@@ -4696,8 +6617,8 @@ fun DevicePairingAndManagerModal(
                                 Box(
                                     modifier = Modifier
                                         .size(240.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .border(2.dp, AccentAmber, RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(20.dp))
                                 ) {
                                     CameraScannerPreview(
                                         onCodeScanned = { rawCode ->
@@ -4725,15 +6646,23 @@ fun DevicePairingAndManagerModal(
                             } else {
                                 Button(
                                     onClick = { launcher.launch(android.Manifest.permission.CAMERA) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
-                                    modifier = Modifier.border(1.dp, Border, RoundedCornerShape(12.dp))
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                                    shape = RoundedCornerShape(100.dp),
+                                    modifier = Modifier.border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
                                 ) {
-                                    Text("Grant Camera Permission", color = TextPrimary)
+                                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Grant Camera Permission", color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
 
-                            TextButton(onClick = { isScanningQr = false }) {
-                                Text("Cancel Scanner", color = AccentRed)
+                            OutlinedButton(
+                                onClick = { isScanningQr = false },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                                shape = RoundedCornerShape(100.dp),
+                                modifier = Modifier.border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
+                            ) {
+                                Text("CANCEL SCANNING", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                             }
                         }
                     } else {
@@ -4749,14 +6678,14 @@ fun DevicePairingAndManagerModal(
 
                             if (pairingSuccess) {
                                 Card(
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF142416)),
+                                    colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .border(1.dp, AccentGreen.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
-                                    shape = RoundedCornerShape(12.dp)
+                                        .border(1.dp, AccentGreen.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                                    shape = RoundedCornerShape(16.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier.padding(14.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
@@ -4771,9 +6700,12 @@ fun DevicePairingAndManagerModal(
                                 Button(
                                     onClick = { pairingSuccess = false },
                                     colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
-                                    modifier = Modifier.fillMaxWidth()
+                                    shape = RoundedCornerShape(100.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
                                 ) {
-                                    Text("Pair Another Device", color = TextPrimary)
+                                    Text("Pair Another Device", color = TextPrimary, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 Row(
@@ -4787,7 +6719,7 @@ fun DevicePairingAndManagerModal(
                                             inputCode = it.uppercase().take(6)
                                             firebaseError = null
                                         },
-                                        placeholder = { Text("Code e.g. GFX8M9") },
+                                        placeholder = { Text("Code e.g. GFX8M9", color = TextSecondary.copy(alpha = 0.6f)) },
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedContainerColor = SurfaceAlt,
@@ -4798,7 +6730,7 @@ fun DevicePairingAndManagerModal(
                                             unfocusedTextColor = TextPrimary
                                         ),
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = RoundedCornerShape(100.dp)
                                     )
 
                                     Button(
@@ -4818,14 +6750,16 @@ fun DevicePairingAndManagerModal(
                                                 }
                                             )
                                         },
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(100.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                        modifier = Modifier.height(52.dp)
+                                        modifier = Modifier
+                                            .height(48.dp)
+                                            .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
                                     ) {
                                         if (isPairingOnline) {
-                                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(16.dp))
+                                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
                                         } else {
-                                            Text("PAIR", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text("PAIR", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White, fontFamily = FontFamily.Monospace)
                                         }
                                     }
                                 }
@@ -4834,27 +6768,28 @@ fun DevicePairingAndManagerModal(
                                     Text(firebaseError!!, color = AccentRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
 
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
                                     onClick = { isScanningQr = true },
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = RoundedCornerShape(20.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .border(1.dp, Border, RoundedCornerShape(16.dp))
+                                        .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(20.dp))
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(16.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                                     ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(44.dp)
-                                                .background(AccentAmber.copy(alpha = 0.1f), CircleShape),
+                                                .background(AccentAmber.copy(alpha = 0.15f), CircleShape)
+                                                .border(1.dp, GlassAmberBorderBrush, CircleShape),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = AccentAmber)
@@ -4868,7 +6803,7 @@ fun DevicePairingAndManagerModal(
                                                 fontFamily = FontFamily.Monospace
                                             )
                                             Text(
-                                                "Instantly pair by scanning QR with camera",
+                                                "Instantly pair by scanning companion screen",
                                                 color = TextSecondary,
                                                 fontSize = 12.sp
                                             )
@@ -4886,7 +6821,7 @@ fun DevicePairingAndManagerModal(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Display this QR code or 6-character code to the other device to pair.",
+                            text = "Display this QR code or 6-character code to the companion phone to link.",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
@@ -4894,10 +6829,10 @@ fun DevicePairingAndManagerModal(
 
                         Card(
                             colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, AccentAmber.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                                .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(20.dp))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -4916,7 +6851,7 @@ fun DevicePairingAndManagerModal(
                                 )
                                 Text(
                                     text = myPairingCode ?: "GENERATING...",
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontSize = 26.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace,
@@ -4926,8 +6861,8 @@ fun DevicePairingAndManagerModal(
                                 if (myPairingCode != null) {
                                     Box(
                                         modifier = Modifier
-                                            .background(Color.White, RoundedCornerShape(12.dp))
-                                            .padding(8.dp)
+                                            .background(Color.White, RoundedCornerShape(16.dp))
+                                            .padding(10.dp)
                                     ) {
                                         com.example.ui.user.QrCodeView(
                                             data = "guardlink_pair:$myPairingCode",
@@ -4960,13 +6895,202 @@ fun DevicePairingAndManagerModal(
                                 com.example.network.FirebaseManager.generateAndPublishPairingCode(context)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
+                            shape = RoundedCornerShape(100.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, Border, RoundedCornerShape(12.dp))
+                                .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(100.dp))
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("GENERATE NEW CODE", color = AccentAmber, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else if (selectedTab == "paired") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "STRICTLY PAIRED DEVICES",
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 1.sp
+                            )
+                            if (devices.isNotEmpty()) {
+                                Text(
+                                    text = "${devices.size} CONNECTED",
+                                    color = AccentGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+
+                        if (devices.isEmpty()) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
+                                shape = RoundedCornerShape(18.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, GlassBorderBrush, RoundedCornerShape(18.dp))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Link,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                    Text(
+                                        text = "NO DEVICES CURRENTLY LINKED",
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Only devices that you connect using QR code or pairing code will appear here.",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 15.sp
+                                    )
+                                    Button(
+                                        onClick = { selectedTab = "scan" },
+                                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                                        shape = RoundedCornerShape(100.dp),
+                                        modifier = Modifier
+                                            .padding(top = 4.dp)
+                                            .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                                    ) {
+                                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("LINK VIA QR / CODE", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                devices.forEach { dev ->
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, if (dev.status == "active") GlassAccentBorderBrush else GlassBorderBrush, RoundedCornerShape(16.dp))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(36.dp)
+                                                        .background(if (dev.status == "active") AccentGreen.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f), CircleShape)
+                                                        .border(1.dp, if (dev.status == "active") AccentGreen.copy(alpha = 0.4f) else Border, CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Smartphone,
+                                                        contentDescription = null,
+                                                        tint = if (dev.status == "active") AccentGreen else TextSecondary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                                Column(modifier = Modifier.weight(1f, fill = false)) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text(
+                                                            text = dev.name,
+                                                            color = TextPrimary,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.weight(1f, fill = false)
+                                                        )
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(6.dp)
+                                                                .background(if (dev.status == "active") AccentGreen else AccentAmber, CircleShape)
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "ID: ${dev.ip.take(14)} • ${dev.status.uppercase()}",
+                                                        color = TextSecondary,
+                                                        fontSize = 10.sp,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    viewModel.removeDevice(dev.ip)
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                                                shape = RoundedCornerShape(100.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier
+                                                    .height(30.dp)
+                                                    .border(1.dp, AccentRed.copy(alpha = 0.4f), RoundedCornerShape(100.dp))
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Unpair", tint = AccentRed, modifier = Modifier.size(13.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("UNPAIR", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                OutlinedButton(
+                                    onClick = { showClearAllConfirm = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
+                                    shape = RoundedCornerShape(100.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, AccentRed.copy(alpha = 0.3f), RoundedCornerShape(100.dp))
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = AccentRed, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("UNPAIR ALL COMPANION DEVICES", color = AccentRed, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -4975,7 +7099,7 @@ fun DevicePairingAndManagerModal(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "If automatic scanning misses a device, configure its IP manually below to initiate full lock & control.",
+                            text = "If automatic discovery is unavailable, enter the device local IP address manually.",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal
@@ -4992,7 +7116,7 @@ fun DevicePairingAndManagerModal(
                                     inputIp = it.filter { char -> char.isDigit() || char == '.' }
                                     inputError = null
                                 },
-                                placeholder = { Text("e.g. 192.168.1.50") },
+                                placeholder = { Text("e.g. 192.168.1.50", color = TextSecondary.copy(alpha = 0.6f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -5004,7 +7128,7 @@ fun DevicePairingAndManagerModal(
                                     unfocusedTextColor = TextPrimary
                                 ),
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(100.dp)
                             )
 
                             Button(
@@ -5020,11 +7144,13 @@ fun DevicePairingAndManagerModal(
                                         inputError = null
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(100.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                modifier = Modifier.height(52.dp)
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
                             ) {
-                                Text("ADD", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("ADD", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White, fontFamily = FontFamily.Monospace)
                             }
                         }
 
@@ -5046,7 +7172,7 @@ fun DevicePairingAndManagerModal(
 
                         Text(
                             text = "REGISTERED MANUAL IPS",
-                            color = AccentAmber,
+                            color = TextSecondary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
@@ -5067,24 +7193,22 @@ fun DevicePairingAndManagerModal(
                                 )
                             }
                         } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 140.dp),
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(manualIps.toList()) { ip ->
+                                manualIps.forEach { ip ->
                                     Card(
                                         colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .border(1.dp, Border, RoundedCornerShape(12.dp))
+                                            .border(1.dp, GlassBorderBrush, RoundedCornerShape(16.dp))
                                     ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                                                .padding(horizontal = 14.dp, vertical = 8.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -5095,12 +7219,12 @@ fun DevicePairingAndManagerModal(
                                                 Icon(
                                                     imageVector = Icons.Default.CellTower,
                                                     contentDescription = null,
-                                                    tint = AccentBlue,
+                                                    tint = AccentCyan,
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                                 Text(
                                                     text = ip,
-                                                    color = Color.White,
+                                                    color = TextPrimary,
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace
@@ -5114,7 +7238,7 @@ fun DevicePairingAndManagerModal(
                                                 Icon(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = "Remove IP",
-                                                    tint = AccentRed.copy(alpha = 0.8f),
+                                                    tint = AccentRed,
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                             }
@@ -5126,14 +7250,59 @@ fun DevicePairingAndManagerModal(
                     }
                 }
             }
+
+            if (showClearAllConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showClearAllConfirm = false },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = AccentRed)
+                            Text("Unpair All Devices?", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    },
+                    text = {
+                        Text(
+                            "Are you sure you want to unpair all companion devices? This disconnects all connected devices and resets local and cloud pairing registrations.",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.clearAllDevices()
+                                showClearAllConfirm = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                            shape = RoundedCornerShape(100.dp)
+                        ) {
+                            Text("CONFIRM UNPAIR ALL", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearAllConfirm = false }) {
+                            Text("CANCEL", color = TextSecondary, fontFamily = FontFamily.Monospace)
+                        }
+                    },
+                    containerColor = Surface,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.border(1.dp, GlassBorderBrush, RoundedCornerShape(20.dp))
+                )
+            }
         },
         confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
-                modifier = Modifier.fillMaxWidth()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(AccentBlue)
+                    .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                    .clickable { onDismiss() },
+                contentAlignment = Alignment.Center
             ) {
-                Text("DONE", color = Color.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("DONE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
             }
         }
     )
@@ -5225,9 +7394,28 @@ fun FindMyDeviceMapCard(
     device: DiscoveredDevice,
     viewModel: AdminDashboardViewModel
 ) {
+    val context = LocalContext.current
     var mapZoom by remember { mutableStateOf(16) }
+    var isSatelliteMode by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
     
+    // Live real-time map updates bound to latitude/longitude
+    LaunchedEffect(device.latitude, device.longitude) {
+        webViewRef?.evaluateJavascript(
+            "if(typeof updatePosition === 'function') { updatePosition(${device.latitude}, ${device.longitude}); }",
+            null
+        )
+    }
+
+    // Delayed invalidateSize trigger to prevent Android WebView zero-height layout distortion
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(350)
+        webViewRef?.evaluateJavascript(
+            "if(typeof map !== 'undefined' && map) { map.invalidateSize(); }",
+            null
+        )
+    }
+
     val htmlContent = remember(device.ip) {
         """
         <!DOCTYPE html>
@@ -5247,33 +7435,126 @@ fun FindMyDeviceMapCard(
                 .leaflet-control-attribution { 
                     display: none !important; 
                 }
-                
-                /* Glowing Locator Dot */
-                .marker-glow {
-                    width: 14px;
-                    height: 14px;
-                    background-color: #03a9f4; /* AccentBlue */
-                    border: 3px solid #ffffff;
-                    border-radius: 50%;
-                    box-shadow: 0 0 12px #03a9f4, 0 0 20px rgba(3,169,244,0.4);
-                    position: absolute;
-                    left: -3px;
-                    top: -3px;
-                    animation: pulse 2s infinite ease-in-out;
+                .leaflet-div-icon, .custom-tactical-radar {
+                    background: transparent !important;
+                    border: none !important;
+                }
+
+                /* Crisp High-DPI non-blurry tile rendering */
+                .leaflet-tile {
+                    image-rendering: -webkit-optimize-contrast !important;
+                    image-rendering: crisp-edges !important;
+                }
+
+                /* Tactical Dark Mode Filter: completely removes Carto watermark & blur */
+                .tactical-dark-tile {
+                    filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(108%) saturate(45%) !important;
+                    -webkit-filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(108%) saturate(45%) !important;
+                }
+
+                /* High-resolution satellite styling */
+                .satellite-tile {
+                    filter: brightness(90%) contrast(105%) !important;
+                    -webkit-filter: brightness(90%) contrast(105%) !important;
                 }
                 
-                @keyframes pulse {
+                /* Tactical Radar Container - 64x64 mathematically centered */
+                .tactical-radar-container {
+                    position: relative;
+                    width: 64px;
+                    height: 64px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    pointer-events: none;
+                }
+
+                /* 360° Rotating Radar Beam with Conic Gradient */
+                .radar-sweep-beam {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 64px;
+                    height: 64px;
+                    border-radius: 50%;
+                    background: conic-gradient(
+                        from 0deg,
+                        rgba(0, 240, 255, 0.45) 0deg,
+                        rgba(0, 240, 255, 0.16) 35deg,
+                        rgba(0, 240, 255, 0.02) 65deg,
+                        transparent 75deg,
+                        transparent 360deg
+                    );
+                    animation: radar-beam-rotate 2.4s linear infinite;
+                    pointer-events: none;
+                }
+                @keyframes radar-beam-rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                /* Concentric Radar Wave Pulses: 3 Staggered Expanding Rings with cubic-bezier */
+                .radar-wave {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    border: 1.5px solid #00f0ff;
+                    box-sizing: border-box;
+                    opacity: 0;
+                    pointer-events: none;
+                    animation: radar-wave-pulse 2.4s cubic-bezier(0.1, 0.7, 0.2, 1) infinite;
+                }
+                .radar-wave.wave-1 { animation-delay: 0s; }
+                .radar-wave.wave-2 { animation-delay: 0.8s; }
+                .radar-wave.wave-3 { animation-delay: 1.6s; }
+
+                @keyframes radar-wave-pulse {
                     0% {
-                        transform: scale(0.9);
-                        box-shadow: 0 0 0 0 rgba(3, 169, 244, 0.7);
+                        width: 14px;
+                        height: 14px;
+                        opacity: 0.85;
+                        border-color: #00f0ff;
+                        box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
                     }
-                    70% {
-                        transform: scale(1.1);
-                        box-shadow: 0 0 0 12px rgba(3, 169, 244, 0);
+                    50% {
+                        opacity: 0.45;
                     }
                     100% {
-                        transform: scale(0.9);
-                        box-shadow: 0 0 0 0 rgba(3, 169, 244, 0);
+                        width: 64px;
+                        height: 64px;
+                        opacity: 0;
+                        border-color: rgba(0, 240, 255, 0);
+                        box-shadow: 0 0 16px rgba(0, 240, 255, 0);
+                    }
+                }
+
+                /* High-Visibility Core Beacon: Electric Cyan Core, 2px Pure White Border */
+                .radar-core-beacon {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 14px;
+                    height: 14px;
+                    background: #00f0ff;
+                    border: 2px solid #ffffff;
+                    border-radius: 50%;
+                    box-shadow: 0 0 8px #00f0ff, 0 0 16px rgba(0, 240, 255, 0.85), 0 0 28px rgba(0, 240, 255, 0.5);
+                    animation: beacon-breathe 1.8s ease-in-out infinite alternate;
+                    z-index: 10;
+                }
+                @keyframes beacon-breathe {
+                    0% {
+                        transform: translate(-50%, -50%) scale(0.92);
+                        box-shadow: 0 0 6px #00f0ff, 0 0 14px rgba(0, 240, 255, 0.7);
+                    }
+                    100% {
+                        transform: translate(-50%, -50%) scale(1.08);
+                        box-shadow: 0 0 10px #00f0ff, 0 0 22px rgba(0, 240, 255, 0.95), 0 0 32px rgba(0, 240, 255, 0.6);
                     }
                 }
             </style>
@@ -5284,6 +7565,9 @@ fun FindMyDeviceMapCard(
                 var map;
                 var marker;
                 var circle;
+                var tacticalLayer;
+                var satelliteLayer;
+                var currentLayer = 'tactical';
                 
                 try {
                     map = L.map('map', { 
@@ -5291,37 +7575,90 @@ fun FindMyDeviceMapCard(
                         attributionControl: false
                     }).setView([${device.latitude}, ${device.longitude}], $mapZoom);
                     
-                    // CartoBasemaps Dark Matter maps are native-dark, clean and bypass policy bans
-                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+                    // Crystal clear OpenStreetMap Tactical Dark layer (no watermark, no API key required)
+                    tacticalLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 19,
-                        attribution: ''
-                    }).addTo(map);
+                        maxNativeZoom: 19,
+                        attribution: '',
+                        className: 'tactical-dark-tile'
+                    });
+
+                    // High-resolution Esri Satellite layer (no watermark, no API key required)
+                    satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        maxZoom: 19,
+                        maxNativeZoom: 19,
+                        attribution: '',
+                        className: 'satellite-tile'
+                    });
+
+                    tacticalLayer.addTo(map);
                     
+                    // Subpixel Center Alignment: Mathematically centered [32, 32] on 64x64 container
                     var customIcon = L.divIcon({
-                        className: 'custom-icon',
-                        html: '<div class="marker-glow"></div>',
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
+                        className: 'custom-tactical-radar',
+                        html: '<div class="tactical-radar-container">' +
+                              '  <div class="radar-sweep-beam"></div>' +
+                              '  <div class="radar-wave wave-1"></div>' +
+                              '  <div class="radar-wave wave-2"></div>' +
+                              '  <div class="radar-wave wave-3"></div>' +
+                              '  <div class="radar-core-beacon"></div>' +
+                              '</div>',
+                        iconSize: [64, 64],
+                        iconAnchor: [32, 32]
                     });
                     
                     marker = L.marker([${device.latitude}, ${device.longitude}], {icon: customIcon}).addTo(map);
                     
                     circle = L.circle([${device.latitude}, ${device.longitude}], {
-                        color: '#03a9f4',
-                        fillColor: '#03a9f4',
-                        fillOpacity: 0.12,
-                        radius: 80
+                        color: '#00f0ff',
+                        fillColor: '#00f0ff',
+                        fillOpacity: 0.08,
+                        weight: 1,
+                        radius: 65
                     }).addTo(map);
                 } catch(e) {
                     console.error("Map creation error", e);
                 }
                 
+                function setMapLayer(type) {
+                    if (!map) return;
+                    if (type === 'satellite') {
+                        if (map.hasLayer(tacticalLayer)) map.removeLayer(tacticalLayer);
+                        if (!map.hasLayer(satelliteLayer)) satelliteLayer.addTo(map);
+                        currentLayer = 'satellite';
+                    } else {
+                        if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+                        if (!map.hasLayer(tacticalLayer)) tacticalLayer.addTo(map);
+                        currentLayer = 'tactical';
+                    }
+                }
+
+                // Smooth glide transitions with linear easing flyTo
                 function updatePosition(lat, lng) {
                     if (map && marker && circle) {
                         var latLng = L.latLng(lat, lng);
-                        map.panTo(latLng);
+                        map.flyTo(latLng, map.getZoom(), {
+                            animate: true,
+                            duration: 1.2,
+                            easeLinearity: 0.25
+                        });
                         marker.setLatLng(latLng);
                         circle.setLatLng(latLng);
+                    }
+                }
+
+                // In-map Recenter Target function
+                function recenterTarget(lat, lng, zoom) {
+                    if (map) {
+                        var latLng = L.latLng(lat, lng);
+                        var targetZoom = zoom || 17;
+                        map.flyTo(latLng, targetZoom, {
+                            animate: true,
+                            duration: 1.2,
+                            easeLinearity: 0.25
+                        });
+                        if (marker) marker.setLatLng(latLng);
+                        if (circle) circle.setLatLng(latLng);
                     }
                 }
                 
@@ -5358,7 +7695,7 @@ fun FindMyDeviceMapCard(
                     Icon(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = "Map Location",
-                        tint = AccentBlue,
+                        tint = Color(0xFF00F0FF),
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -5388,7 +7725,7 @@ fun FindMyDeviceMapCard(
                     .background(Color(0xFF000000), RoundedCornerShape(8.dp))
                     .border(1.dp, Border, RoundedCornerShape(8.dp))
             ) {
-                // Interactive OpenStreetMap render using WebView!
+                // Interactive OpenStreetMap render using WebView
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
                         android.webkit.WebView(ctx).apply {
@@ -5401,30 +7738,62 @@ fun FindMyDeviceMapCard(
                                 domStorageEnabled = true
                                 useWideViewPort = true
                                 loadWithOverviewMode = true
-                                // Set modern high-quality User Agent to prevent any automated 418 bans
                                 userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36 GuardLink/1.2.0"
                             }
-                            webViewClient = android.webkit.WebViewClient()
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    super.onPageFinished(view, url)
+                                    // Prevent zero-height layout distortion by forcing layout invalidation
+                                    view?.evaluateJavascript(
+                                        "if(typeof map !== 'undefined' && map) { setTimeout(function(){ map.invalidateSize(); }, 200); }",
+                                        null
+                                    )
+                                }
+                            }
                             isHorizontalScrollBarEnabled = false
                             isVerticalScrollBarEnabled = false
                             
-                            loadDataWithBaseURL("https://basemaps.cartocdn.com", htmlContent, "text/html", "UTF-8", null)
+                            loadDataWithBaseURL("https://tile.openstreetmap.org", htmlContent, "text/html", "UTF-8", null)
                         }
                     },
                     update = { webView ->
                         webViewRef = webView
-                        webView.evaluateJavascript("if(typeof updatePosition === 'function') { updatePosition(${device.latitude}, ${device.longitude}); }", null)
+                        webView.evaluateJavascript(
+                            "if(typeof updatePosition === 'function') { updatePosition(${device.latitude}, ${device.longitude}); }",
+                            null
+                        )
                     },
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Hovered zoom controls (Google Maps styled overlays)
+                // In-map Hovered Controls: Recenter Target (GpsFixed) & Zoom
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    // Recenter Target button (GpsFixed) to re-lock camera onto device at zoom 17
+                    IconButton(
+                        onClick = { 
+                            mapZoom = 17
+                            webViewRef?.evaluateJavascript(
+                                "if(typeof recenterTarget === 'function') { recenterTarget(${device.latitude}, ${device.longitude}, 17); }",
+                                null
+                            )
+                        },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GpsFixed,
+                            contentDescription = "Recenter Target",
+                            tint = Color(0xFF00F0FF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = { 
                             mapZoom = (mapZoom + 1).coerceAtMost(19)
@@ -5449,42 +7818,124 @@ fun FindMyDeviceMapCard(
                     }
                 }
 
-                Box(
+                // In-map Top Controls: Compass & Satellite/Tactical Layer Switcher
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        .padding(6.dp)
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Navigation,
-                        contentDescription = "Compass",
-                        tint = AccentAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.7f), CircleShape)
+                            .padding(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Navigation,
+                            contentDescription = "Compass",
+                            tint = AccentAmber,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    // Layer Switch Pill: Tactical Dark <-> Satellite Recon
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.75f))
+                            .border(0.5.dp, Color(0xFF00F0FF).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .clickable {
+                                isSatelliteMode = !isSatelliteMode
+                                val layer = if (isSatelliteMode) "satellite" else "tactical"
+                                webViewRef?.evaluateJavascript("if(typeof setMapLayer === 'function') { setMapLayer('$layer'); }", null)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Map Style",
+                            tint = Color(0xFF00F0FF),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = if (isSatelliteMode) "SATELLITE" else "TACTICAL",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("LATITUDE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-                    Text(
-                        text = String.format("%.6f", device.latitude), 
-                        color = TextPrimary, 
-                        fontSize = 11.sp, 
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column {
+                        Text("LATITUDE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        Text(
+                            text = String.format("%.6f", device.latitude), 
+                            color = TextPrimary, 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Column {
+                        Text("LONGITUDE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        Text(
+                            text = String.format("%.6f", device.longitude), 
+                            color = TextPrimary, 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("LONGITUDE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+
+                // Open Maps button that launches external turn-by-turn navigation directly
+                OutlinedButton(
+                    onClick = {
+                        val lat = device.latitude
+                        val lng = device.longitude
+                        val label = Uri.encode(device.name.ifBlank { "Tracked Device" })
+                        val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
+                            setPackage("com.google.android.apps.maps")
+                        }
+                        try {
+                            context.startActivity(mapIntent)
+                        } catch (e: Exception) {
+                            val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+                            context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
+                        }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00F0FF)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.5f)),
+                    modifier = Modifier.height(34.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = "Open Maps",
+                        modifier = Modifier.size(14.dp),
+                        tint = Color(0xFF00F0FF)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = String.format("%.6f", device.longitude), 
-                        color = TextPrimary, 
-                        fontSize = 11.sp, 
+                        text = "OPEN MAPS",
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
@@ -5521,6 +7972,50 @@ fun FindMyDeviceMapCard(
                     fontFamily = FontFamily.Monospace
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AudioEqualizerVisualizer(
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFFFBBF24)
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "audioEq")
+    val h1 by infiniteTransition.animateFloat(
+        initialValue = 4f, targetValue = 18f,
+        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h1"
+    )
+    val h2 by infiniteTransition.animateFloat(
+        initialValue = 16f, targetValue = 6f,
+        animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h2"
+    )
+    val h3 by infiniteTransition.animateFloat(
+        initialValue = 6f, targetValue = 20f,
+        animationSpec = infiniteRepeatable(tween(510, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h3"
+    )
+    val h4 by infiniteTransition.animateFloat(
+        initialValue = 14f, targetValue = 5f,
+        animationSpec = infiniteRepeatable(tween(400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h4"
+    )
+
+    Row(
+        modifier = modifier.height(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(h1, h2, h3, h4).forEach { h ->
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(h.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(color)
+            )
         }
     }
 }

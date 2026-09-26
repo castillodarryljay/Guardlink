@@ -3,7 +3,9 @@ package com.example.ui.user
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,8 +38,14 @@ import com.example.service.GuardLinkService
 import com.example.ui.theme.*
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.window.DialogProperties
 import com.example.network.FirebaseManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun UserHomeScreen(
@@ -89,6 +97,17 @@ fun UserHomeScreen(
                     android.Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        }
+    }
+
+    LaunchedEffect(hasLocationPermission) {
+        if (hasLocationPermission) {
+            try {
+                val loc = FirebaseManager.getDeviceLocation(context)
+                if (loc != null) {
+                    StateManager.saveLastKnownLocation(loc.first, loc.second)
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -155,7 +174,16 @@ fun UserHomeScreen(
 
     var editDeviceName by remember { mutableStateOf(StateManager.deviceName.value) }
 
-    var isIgnoringBatteryOptimizations by remember { mutableStateOf(true) }
+    var isIgnoringBatteryOptimizations by remember {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+            } else {
+                true
+            }
+        )
+    }
 
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -249,10 +277,15 @@ fun UserHomeScreen(
                     Text(
                         text = "GUARDLINK USER MODE",
                         color = TextPrimary,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.5.sp
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(end = 8.dp)
                     )
 
                     // Status Badge (Active locks vs normal running)
@@ -279,86 +312,151 @@ fun UserHomeScreen(
                     }
                 }
 
-                // Active Voice Broadcast Alert Banner
-                activeBroadcast?.let { b ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Surface),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
+                // Active Voice Broadcast Alert Banner with Tactical Animation
+                AnimatedVisibility(
+                    visible = activeBroadcast != null,
+                    enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(350)),
+                    exit = fadeOut(animationSpec = tween(250)) + shrinkVertically(animationSpec = tween(300))
+                ) {
+                    activeBroadcast?.let { b ->
+                        val infiniteBroadcastAnim = rememberInfiniteTransition(label = "broadcast_fx")
+                        val megaphoneAngle by infiniteBroadcastAnim.animateFloat(
+                            initialValue = -12f,
+                            targetValue = 12f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(220, easing = LinearEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "megaphone_angle"
+                        )
+                        val glowAlpha by infiniteBroadcastAnim.animateFloat(
+                            initialValue = 0.35f,
+                            targetValue = 0.85f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(700, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "glow_alpha"
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E170A)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.5.dp, Color(0xFFFFB300).copy(alpha = glowAlpha), RoundedCornerShape(14.dp))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .background(Color(0xFFFFB300).copy(alpha = 0.2f), CircleShape),
-                                        contentAlignment = Alignment.Center
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Icon(
-                                            Icons.Default.Campaign,
-                                            contentDescription = null,
-                                            tint = Color(0xFFFFB300),
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .background(Color(0xFFFFB300).copy(alpha = 0.2f), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Campaign,
+                                                contentDescription = null,
+                                                tint = Color(0xFFFFB300),
+                                                modifier = Modifier
+                                                    .size(22.dp)
+                                                    .graphicsLayer { rotationZ = megaphoneAngle }
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f, fill = false)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "PRIORITY BROADCAST ALERT",
+                                                    color = Color(0xFFFFB300),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    letterSpacing = 1.sp,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                                UserBroadcastEqualizer(color = Color(0xFFFFB300))
+                                            }
+                                            Text(
+                                                text = "From ${b.sender} • Dispatched via Recon Uplink",
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 10.sp,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
-                                    Column {
-                                        Text(
-                                            text = "PRIORITY BROADCAST ALERT",
-                                            color = Color(0xFFFFB300),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace,
-                                            letterSpacing = 1.sp
-                                        )
-                                        Text(
-                                            text = "From ${b.sender}",
-                                            color = TextSecondary,
-                                            fontSize = 10.sp
-                                        )
+                                    IconButton(
+                                        onClick = {
+                                            StateManager.dismissActiveBroadcast()
+                                            FirebaseManager.acknowledgeActiveBroadcast(b.id)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = TextSecondary, modifier = Modifier.size(16.dp))
                                     }
                                 }
-                                IconButton(
-                                    onClick = { StateManager.dismissActiveBroadcast() },
-                                    modifier = Modifier.size(28.dp)
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = b.message,
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 20.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = TextSecondary, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = b.message,
-                                color = TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                lineHeight = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        com.example.tts.TextToSpeechManager.speak(context, b.message)
-                                    },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFB300)),
-                                    modifier = Modifier.height(32.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("REPLAY SPEECH", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "STATUS: BROADCAST ACTIVE",
+                                        color = Color(0xFF34D399),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                StateManager.dismissActiveBroadcast()
+                                                FirebaseManager.acknowledgeActiveBroadcast(b.id)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color(0xFF34D399))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("ACKNOWLEDGE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                com.example.tts.TextToSpeechManager.speak(context, b.message)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300)),
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("REPLAY SPEECH", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -480,7 +578,7 @@ fun UserHomeScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                             Text(
                                 text = if (isScreenAuthorized) "REMOTE SCREEN STREAM: ALWAYS ACTIVE" else "ENABLE REMOTE SCREEN STREAM",
                                 color = if (isScreenAuthorized) AccentGreen else AccentPurple,
@@ -635,7 +733,7 @@ fun UserHomeScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         val explanationText = if (!isServiceRunning) {
-                            "The background monitoring service is inactive."
+                            "The background monitoring service is offline."
                         } else if (isFirebaseConnected) {
                             "Syncing commands through Firebase (Secure Link)."
                         } else {
@@ -683,6 +781,114 @@ fun UserHomeScreen(
                         }
                     }
                 }
+
+            // ALWAYS-ON CONNECTION & BATTERY GUARD CARD
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isIgnoringBatteryOptimizations) Color(0xFF0F1E19) else Color(0xFF22160C)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isIgnoringBatteryOptimizations) Color(0xFF10B981).copy(alpha = 0.4f) else Color(0xFFF59E0B).copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isIgnoringBatteryOptimizations) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (isIgnoringBatteryOptimizations) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "ALWAYS-ON LINK GUARD",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isIgnoringBatteryOptimizations) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = if (isIgnoringBatteryOptimizations) "UNRESTRICTED" else "ACTION NEEDED",
+                                color = if (isIgnoringBatteryOptimizations) Color(0xFF4ADE80) else Color(0xFFFBBF24),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (isIgnoringBatteryOptimizations) {
+                            "Unrestricted background execution enabled. Android Doze/Deep Sleep will not kill or disconnect this device even if unused with screen off for long periods."
+                        } else {
+                            "Android battery optimization suspends CPU and network when the screen is turned off or idle for a long time. Grant background execution exemption to keep the connection permanently active."
+                        },
+                        color = TextSecondary,
+                        fontSize = 11.5.sp,
+                        lineHeight = 16.sp
+                    )
+
+                    if (!isIgnoringBatteryOptimizations) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = {
+                                try {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                            data = android.net.Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                } catch (e: Exception) {
+                                    try {
+                                        val fallbackIntent = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(fallbackIntent)
+                                    } catch (ex: Exception) {
+                                        android.util.Log.e("UserHome", "Failed opening battery optimization intent", ex)
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "KEEP RUNNING IN BACKGROUND 24/7",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
 
             // WALKIE-TALKIE PUSH TO TALK INTERCOM CARD
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1302,172 +1508,474 @@ fun UnpairedFirebaseView(
     onRegenerate: () -> Unit,
     onExit: () -> Unit
 ) {
+    val context = LocalContext.current
+    var selectedTab by remember { mutableStateOf("my_code") }
+    var adminCodeInput by remember { mutableStateOf("") }
+    var isPairingOnline by remember { mutableStateOf(false) }
+    var pairError by remember { mutableStateOf<String?>(null) }
+    var isScanningAdminQr by remember { mutableStateOf(false) }
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+        )
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // App State title
-        Text(
-            text = "PAIR DEVICE ONLINE",
-            color = TextMono,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.5.sp,
-            modifier = Modifier.align(Alignment.Start)
-        )
-
-        // Device Display Name Field
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Surface),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Border, RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "GUARDLINK PAIRING",
+                color = AccentCyan,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.4.sp
+            )
+            Box(
+                modifier = Modifier
+                    .background(AccentCyan.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .border(1.dp, AccentCyan.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
                 Text(
-                    text = "DEVICE DISPLAY NAME",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
+                    text = "AWAITING LINK",
+                    color = AccentCyan,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = deviceName,
-                    onValueChange = onDeviceNameChange,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentGreen,
-                        unfocusedBorderColor = Border,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    placeholder = { Text("e.g. My Phone", color = TextSecondary) }
                 )
             }
         }
 
-        // Pairing Code & QR Code display Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Surface),
+        // Liquid Glass Cyber Pill Tab Row
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, Border, RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp)
+                .background(SurfaceAlt, RoundedCornerShape(100.dp))
+                .border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "PAIRING CODE",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (pairingCode == null) {
-                    CircularProgressIndicator(color = AccentGreen, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Registering with Firebase...", color = TextSecondary, fontSize = 12.sp)
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .background(Border, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = pairingCode,
-                            color = AccentGreen,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 4.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        text = "Or scan QR code on admin device:",
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+            val isMyCode = selectedTab == "my_code"
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(if (isMyCode) AccentCyan else Color.Transparent)
+                    .then(
+                        if (isMyCode) Modifier.border(1.dp, AccentCyan.copy(alpha = 0.6f), RoundedCornerShape(100.dp))
+                        else Modifier
                     )
+                    .clickable { selectedTab = "my_code"; isScanningAdminQr = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "MY QR & CODE",
+                    color = if (isMyCode) Color.Black else TextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                )
+            }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    QrCodeView(data = "guardlink_pair:$pairingCode")
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = onRegenerate,
-                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
-                        modifier = Modifier.border(1.dp, Border, RoundedCornerShape(8.dp)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Regenerate Code", color = TextPrimary)
-                    }
-                }
+            val isEnterCode = selectedTab == "enter_code"
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(if (isEnterCode) AccentBlue else Color.Transparent)
+                    .then(
+                        if (isEnterCode) Modifier.border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                        else Modifier
+                    )
+                    .clickable { selectedTab = "enter_code"; isScanningAdminQr = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "LINK TO ADMIN",
+                    color = if (isEnterCode) Color.White else TextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                )
             }
         }
 
-        // Connection waiting details Info
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF142416)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, AccentGreen.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        if (selectedTab == "my_code") {
+            // Device Display Name Field
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GlassBorderBrush, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = AccentGreen,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "WAITING FOR ADMIN HANDSHAKE",
-                        color = AccentGreen,
+                        text = "DEVICE DISPLAY NAME",
+                        color = TextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = deviceName,
+                        onValueChange = onDeviceNameChange,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan,
+                            unfocusedBorderColor = Border,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = SurfaceAlt,
+                            unfocusedContainerColor = SurfaceAlt
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        placeholder = { Text("e.g. Living Room Tablet", color = TextTertiary) }
+                    )
+                }
+            }
+
+            // Pairing Code & QR Code display Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, LiquidGlassChromaticBorder, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "Enter this pairing code or scan the QR code from the Administrator's Dashboard to secure the connection online.",
-                        color = TextPrimary,
-                        fontSize = 12.sp
+                        text = "PAIRING CODE",
+                        color = AccentCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (pairingCode == null) {
+                        CircularProgressIndicator(color = AccentCyan, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Registering with Firebase...", color = TextSecondary, fontSize = 12.sp)
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(SurfaceAlt, RoundedCornerShape(14.dp))
+                                .border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = pairingCode,
+                                color = Color.White,
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 4.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Text(
+                            text = "Or scan this QR code on the admin console:",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .background(Color.White, RoundedCornerShape(16.dp))
+                                .border(2.dp, AccentCyan.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                .padding(10.dp)
+                        ) {
+                            QrCodeView(
+                                data = "guardlink_pair:$pairingCode",
+                                modifier = Modifier.size(170.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Button(
+                            onClick = onRegenerate,
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
+                            modifier = Modifier
+                                .border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
+                                .height(42.dp),
+                            shape = RoundedCornerShape(100.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Regenerate Code", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                }
+            }
+
+            // Connection waiting details Info
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GlassGreenBorderBrush, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = AccentGreen,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "WAITING FOR ADMIN HANDSHAKE",
+                            color = AccentGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.6.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Enter this pairing code or scan the QR code from the Administrator's Dashboard to secure the connection online.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        } else {
+            // LINK TO ADMIN VIEW
+            if (isScanningAdminQr) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "POINT CAMERA AT ADMIN DASHBOARD QR CODE",
+                        color = AccentAmber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
+
+                    if (hasCameraPermission) {
+                        Box(
+                            modifier = Modifier
+                                .size(240.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .border(2.dp, GlassAmberBorderBrush, RoundedCornerShape(20.dp))
+                        ) {
+                            com.example.ui.admin.CameraScannerPreview(
+                                onCodeScanned = { rawCode ->
+                                    val code = rawCode.removePrefix("guardlink_pair:").trim().uppercase()
+                                    if (code.isNotEmpty() && !isPairingOnline) {
+                                        isScanningAdminQr = false
+                                        adminCodeInput = code
+                                        isPairingOnline = true
+                                        pairError = null
+                                        FirebaseManager.pairDeviceByCode(context, code,
+                                            onSuccess = {
+                                                isPairingOnline = false
+                                                adminCodeInput = ""
+                                            },
+                                            onFailure = { err ->
+                                                isPairingOnline = false
+                                                pairError = err
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = { cameraLauncher.launch(android.Manifest.permission.CAMERA) },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                            shape = RoundedCornerShape(100.dp),
+                            modifier = Modifier.border(1.dp, GlassAccentBorderBrush, RoundedCornerShape(100.dp))
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Grant Camera Permission", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { isScanningAdminQr = false },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                        shape = RoundedCornerShape(100.dp),
+                        modifier = Modifier.border(1.dp, GlassBorderBrush, RoundedCornerShape(100.dp))
+                    ) {
+                        Text("CANCEL SCANNING", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    }
+                }
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, GlassBorderBrush, RoundedCornerShape(20.dp)),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "ENTER ADMIN PAIRING CODE",
+                            color = AccentCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "If you have the Admin's QR or 6-character code (from their 'My QR' tab), enter it below to initiate direct link.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = adminCodeInput,
+                                onValueChange = {
+                                    adminCodeInput = it.uppercase().take(6)
+                                    pairError = null
+                                },
+                                placeholder = { Text("e.g. ADM7K2", color = TextTertiary) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = SurfaceAlt,
+                                    unfocusedContainerColor = SurfaceAlt,
+                                    focusedBorderColor = AccentCyan,
+                                    unfocusedBorderColor = Border,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(100.dp)
+                            )
+
+                            Button(
+                                enabled = adminCodeInput.length >= 4 && !isPairingOnline,
+                                onClick = {
+                                    isPairingOnline = true
+                                    pairError = null
+                                    FirebaseManager.pairDeviceByCode(context, adminCodeInput,
+                                        onSuccess = {
+                                            isPairingOnline = false
+                                            adminCodeInput = ""
+                                        },
+                                        onFailure = { err ->
+                                            isPairingOnline = false
+                                            pairError = err
+                                        }
+                                    )
+                                },
+                                shape = RoundedCornerShape(100.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .border(1.dp, AccentCyan.copy(alpha = 0.5f), RoundedCornerShape(100.dp))
+                            ) {
+                                if (isPairingOnline) {
+                                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("CONNECT", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+
+                        pairError?.let { err ->
+                            Text(err, color = AccentRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = SurfaceAlt),
+                            onClick = { isScanningAdminQr = true },
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, GlassAmberBorderBrush, RoundedCornerShape(16.dp))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(AccentAmber.copy(alpha = 0.15f), CircleShape)
+                                        .border(1.dp, GlassAmberBorderBrush, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("SCAN ADMIN SCREEN QR", color = AccentAmber, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    Text("Point camera at admin dashboard QR", color = TextSecondary, fontSize = 11.sp)
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Exit button
         Button(
             colors = ButtonDefaults.buttonColors(containerColor = SurfaceAlt),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(100.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, Border, RoundedCornerShape(12.dp))
+                .border(1.dp, GlassRedBorderBrush, RoundedCornerShape(100.dp))
                 .height(48.dp),
             onClick = onExit
         ) {
@@ -1480,8 +1988,9 @@ fun UnpairedFirebaseView(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Cancel & Stop Service",
-                fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
                 color = AccentRed
             )
         }
@@ -1490,55 +1999,129 @@ fun UnpairedFirebaseView(
 
 @Composable
 fun QrCodeView(data: String, modifier: Modifier = Modifier) {
-    val sizePx = 500
-    val bitMatrix = remember(data) {
+    var qrBitmap by remember(data) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var hasError by remember(data) { mutableStateOf(false) }
+
+    LaunchedEffect(data) {
+        if (data.isBlank()) {
+            qrBitmap = null
+            hasError = false
+            return@LaunchedEffect
+        }
         try {
-            com.google.zxing.qrcode.QRCodeWriter().encode(
-                data,
-                com.google.zxing.BarcodeFormat.QR_CODE,
-                sizePx,
-                sizePx
-            )
+            val bitmap = withContext(Dispatchers.Default) {
+                val size = 256
+                val hints = mapOf(
+                    com.google.zxing.EncodeHintType.MARGIN to 1,
+                    com.google.zxing.EncodeHintType.CHARACTER_SET to "UTF-8"
+                )
+                val bitMatrix = com.google.zxing.qrcode.QRCodeWriter().encode(
+                    data,
+                    com.google.zxing.BarcodeFormat.QR_CODE,
+                    size,
+                    size,
+                    hints
+                )
+                val width = bitMatrix.width
+                val height = bitMatrix.height
+                val pixels = IntArray(width * height)
+                val black = android.graphics.Color.BLACK
+                val white = android.graphics.Color.WHITE
+                for (y in 0 until height) {
+                    val offset = y * width
+                    for (x in 0 until width) {
+                        pixels[offset + x] = if (bitMatrix.get(x, y)) black else white
+                    }
+                }
+                val bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+                bmp.setPixels(pixels, 0, width, 0, 0, width, height)
+                bmp.asImageBitmap()
+            }
+            qrBitmap = bitmap
+            hasError = false
         } catch (e: Exception) {
-            null
+            hasError = true
+            qrBitmap = null
         }
     }
 
-    if (bitMatrix != null) {
-        androidx.compose.foundation.Canvas(
-            modifier = modifier
-                .size(200.dp)
-                .background(Color.White, RoundedCornerShape(8.dp))
-                .padding(12.dp)
-        ) {
-            val width = bitMatrix.width
-            val height = bitMatrix.height
-            val cellWidth = size.width / width
-            val cellHeight = size.height / height
-
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    if (bitMatrix.get(x, y)) {
-                        drawRect(
-                            color = Color.Black,
-                            topLeft = androidx.compose.ui.geometry.Offset(x * cellWidth, y * cellHeight),
-                            size = androidx.compose.ui.geometry.Size(cellWidth + 0.5f, cellHeight + 0.5f)
-                        )
-                    }
-                }
-            }
-        }
-    } else {
-        Box(
-            modifier = modifier
-                .size(200.dp)
-                .background(Color.Gray),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Unable to render QR code", color = Color.White, fontSize = 12.sp)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        val currentBitmap = qrBitmap
+        if (currentBitmap != null) {
+            Image(
+                bitmap = currentBitmap,
+                contentDescription = "QR Code",
+                filterQuality = FilterQuality.None,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            )
+        } else if (hasError) {
+            Text(
+                text = "Unable to render QR",
+                color = Color(0xFF64748B),
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(26.dp),
+                color = Color(0xFF2563EB),
+                strokeWidth = 2.5.dp
+            )
         }
     }
 }
 
 // Simple color helper for ChoiceGreyState
 private val ChoiceGreyState = Color(0xFF323F4E)
+
+@Composable
+fun UserBroadcastEqualizer(
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFFFFB300)
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "user_audio_eq")
+    val h1 by infiniteTransition.animateFloat(
+        initialValue = 4f, targetValue = 16f,
+        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h1"
+    )
+    val h2 by infiniteTransition.animateFloat(
+        initialValue = 14f, targetValue = 5f,
+        animationSpec = infiniteRepeatable(tween(310, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h2"
+    )
+    val h3 by infiniteTransition.animateFloat(
+        initialValue = 5f, targetValue = 18f,
+        animationSpec = infiniteRepeatable(tween(460, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h3"
+    )
+    val h4 by infiniteTransition.animateFloat(
+        initialValue = 12f, targetValue = 4f,
+        animationSpec = infiniteRepeatable(tween(350, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "h4"
+    )
+
+    Row(
+        modifier = modifier.height(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(h1, h2, h3, h4).forEach { h ->
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(h.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(color)
+            )
+        }
+    }
+}
+
